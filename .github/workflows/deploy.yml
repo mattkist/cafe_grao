@@ -34,6 +34,9 @@ jobs:
 
       - name: Build
         working-directory: coffee-collab
+        env:
+          VITE_GOOGLE_CLIENT_ID: ${{ secrets.VITE_GOOGLE_CLIENT_ID }}
+          VITE_GOOGLE_DRIVE_FOLDER_ID: ${{ secrets.VITE_GOOGLE_DRIVE_FOLDER_ID }}
         run: npm run build
 
       - name: Add SPA fallback (404.html)

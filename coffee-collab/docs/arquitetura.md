@@ -1,0 +1,392 @@
+# Arquitetura do Sistema - CAFÉ GRÃO
+
+Este documento descreve a arquitetura do sistema, decisões de design e padrões utilizados no desenvolvimento.
+
+---
+
+## 🏗️ Visão Geral da Arquitetura
+
+O **CAFÉ GRÃO** é uma **Single Page Application (SPA)** que roda completamente do lado do cliente, sem necessidade de servidor backend próprio.
+
+```
+┌─────────────────────────────────────────────────┐
+│            Cliente (Navegador)                  │
+│                                                 │
+│  ┌─────────────┐      ┌──────────────┐        │
+│  │   React     │      │   Firebase   │        │
+│  │   (Vite)    │◄─────┤   Services   │        │
+│  └─────────────┘      └──────────────┘        │
+│         │                     │                │
+│         │                     │                │
+│  ┌──────▼──────┐      ┌──────▼──────┐        │
+│  │ Components  │      │  Auth + DB  │        │
+│  │   Hooks     │      │  (Cloud)    │        │
+│  └─────────────┘      └─────────────┘        │
+│                                                 │
+└─────────────────────────────────────────────────┘
+         │                     │
+         │                     │
+         └─────────────────────┘
+            Deploy: GitHub Pages
+```
+
+### Características Arquiteturais
+
+1. **Frontend-only**: Toda lógica roda no navegador
+2. **BaaS (Backend as a Service)**: Firebase fornece backend completo
+3. **Estático**: Build gera arquivos estáticos (HTML/CSS/JS)
+4. **SPA**: Roteamento client-side com React Router (múltiplas páginas)
+5. **Visualizações**: Gráficos interativos com Apache ECharts
+
+---
+
+## 📁 Estrutura de Pastas
+
+```
+src/
+├── components/          # Componentes React reutilizáveis
+│   └── LoginButton.jsx # Componente de autenticação
+│
+├── pages/              # Páginas/rotas da aplicação
+│   ├── Home.jsx        # Página inicial
+│   ├── Dashboard.jsx   # Dashboard principal
+│   └── Charts.jsx      # Página de gráficos
+│
+├── hooks/              # Custom hooks React
+│   └── useAuth.js      # Hook de autenticação
+│
+├── services/           # Lógica de negócio e integrações
+│   ├── userService.js           # Operações de perfil de usuário
+│   └── contributionService.js   # Operações de contribuições
+│
+├── lib/                # Configurações e utilitários
+│   └── firebase.js     # Configuração do Firebase
+│
+├── App.jsx             # Componente raiz (configuração de rotas)
+└── main.jsx            # Entry point (ponto de entrada)
+```
+
+### Organização por Responsabilidade
+
+- **`components/`**: Componentes de UI reutilizáveis
+- **`pages/`**: Páginas completas da aplicação (rotas)
+- **`hooks/`**: Lógica compartilhada e reutilizável (custom hooks)
+- **`services/`**: Lógica de negócio e comunicação com APIs/externos
+- **`lib/`**: Configurações globais e inicializações
+
+---
+
+## 🔐 Arquitetura de Autenticação
+
+### Fluxo de Autenticação
+
+```
+1. Usuário clica "Entrar com Google"
+   ↓
+2. Firebase Auth abre popup Google OAuth
+   ↓
+3. Usuário autentica com conta Google
+   ↓
+4. Firebase retorna token e dados do usuário
+   ↓
+5. useAuth hook armazena estado do usuário
+   ↓
+6. userService cria/atualiza perfil no Firestore
+   ↓
+7. App renderiza conteúdo autenticado
+```
+
+### Gerenciamento de Estado de Autenticação
+
+- **`useAuth` hook**: Gerencia estado global de autenticação
+- **Firebase Auth**: Fonte da verdade (validação server-side)
+- **onAuthStateChanged**: Listener que atualiza estado automaticamente
+
+---
+
+## 💾 Arquitetura de Dados
+
+### Modelo de Dados no Firestore
+
+#### Collection: `users`
+
+Armazena perfis de usuários (um documento por usuário).
+
+```javascript
+{
+  uid: string,              // ID único do usuário (mesmo do Firebase Auth)
+  email: string | null,     // Email do usuário
+  displayName: string | null, // Nome exibido
+  photoURL: string | null,  // URL da foto de perfil
+  createdAt: Timestamp,     // Data de criação
+  updatedAt: Timestamp      // Data de atualização
+}
+```
+
+**Regras de Segurança**:
+- Usuário autenticado pode **ler** qualquer perfil
+- Usuário só pode **escrever** seu próprio perfil (`uid` deve coincidir)
+
+#### Collection: `contributions`
+
+Armazena todas as contribuições (compartilhadas entre todos os usuários).
+
+```javascript
+{
+  id: string,               // ID do documento (gerado automaticamente)
+  userId: string,           // ID do usuário que contribuiu
+  userName: string | null,  // Nome do usuário (para exibição)
+  amount: number,           // Valor da contribuição
+  description: string,     // Descrição da compra
+  date: Timestamp,          // Data da contribuição
+  createdAt: Timestamp      // Data de criação do registro
+}
+```
+
+**Regras de Segurança**:
+- Qualquer usuário autenticado pode **ler** todas as contribuições
+- Qualquer usuário autenticado pode **escrever** novas contribuições
+
+### Padrão: Dados Compartilhados
+
+**Decisão de Design**: Todos os usuários veem os mesmos dados de contribuições.
+
+**Por quê**:
+- Sistema colaborativo onde transparência é importante
+- Todos precisam saber quem contribuiu e quando
+- Facilita visualização coletiva em gráficos
+
+---
+
+## 🎣 Padrão de Custom Hooks
+
+### `useAuth`
+
+**Propósito**: Centralizar toda lógica de autenticação.
+
+**Retorna**:
+```javascript
+{
+  user: User | null,        // Objeto do usuário atual
+  loading: boolean,         // Estado de carregamento
+  signInWithGoogle: () => Promise,  // Função de login
+  signOut: () => Promise           // Função de logout
+}
+```
+
+**Benefícios**:
+- Reutilizável em qualquer componente
+- Estado sincronizado automaticamente
+- Lógica isolada e testável
+
+---
+
+## 🔧 Padrão de Services
+
+### `userService.js`
+
+**Responsabilidade**: Operações de CRUD de perfis de usuários.
+
+**Funções**:
+- `getOrCreateUserProfile(user)`: Cria perfil se não existir, retorna se já existir
+
+### `contributionService.js`
+
+**Responsabilidade**: Operações de CRUD de contribuições.
+
+**Funções**:
+- `addContribution(userId, userName, amount, description)`: Adiciona nova contribuição
+- `getAllContributions()`: Retorna todas as contribuições ordenadas
+
+**Padrão**: Cada service é responsável por uma entidade específica do domínio.
+
+---
+
+## ⚙️ Configuração do Build (Vite)
+
+### Base Path Condicional
+
+```javascript
+base: mode === 'production' ? '/cafe_grao/' : '/'
+```
+
+**Decisão**: Em desenvolvimento local, base é `/` (raiz). Em produção (GitHub Pages), base é `/cafe_grao/`.
+
+**Por quê**: GitHub Pages serve o app em um subpath (`/cafe_grao/`), mas localmente roda na raiz.
+
+---
+
+## 🔒 Segurança
+
+### Regras do Firestore
+
+```javascript
+// Usuários: leitura livre, escrita apenas do próprio perfil
+match /users/{userId} {
+  allow read: if request.auth != null;
+  allow write: if request.auth != null && request.auth.uid == userId;
+}
+
+// Contribuições: leitura/escrita livre para autenticados
+match /contributions/{docId} {
+  allow read: if request.auth != null;
+  allow write: if request.auth != null;
+}
+```
+
+**Princípios**:
+- Sempre verificar autenticação (`request.auth != null`)
+- Usuários só podem modificar seus próprios perfis
+- Contribuições são públicas entre usuários autenticados
+
+---
+
+## 🚀 Deploy
+
+### Fluxo de Deploy
+
+```
+1. Push para branch `main`
+   ↓
+2. GitHub Actions triggera workflow
+   ↓
+3. Build: `npm run build` (Vite compila para `dist/`)
+   ↓
+4. Copia `index.html` para `404.html` (fallback SPA)
+   ↓
+5. Deploy para GitHub Pages
+   ↓
+6. App disponível em: https://mattkist.github.io/cafe_grao/
+```
+
+### Fallback SPA
+
+GitHub Pages não suporta roteamento client-side nativamente. Solução: copiar `index.html` para `404.html`. Quando uma rota não existe, GitHub Pages serve `404.html`, que é nosso app React, permitindo roteamento client-side.
+
+---
+
+## 🔄 Fluxo de Dados
+
+```
+┌─────────────┐
+│  Component  │
+└──────┬──────┘
+       │
+       │ chama hook/service
+       ↓
+┌─────────────┐      ┌──────────────┐
+│    Hook     │◄─────┤   Service   │
+│  (useAuth)  │      │ (Firestore)  │
+└──────┬──────┘      └──────────────┘
+       │                     │
+       │ atualiza estado     │ atualiza banco
+       ↓                     ↓
+┌─────────────┐      ┌──────────────┐
+│   Estado    │      │   Firestore  │
+│   React     │      │   (Cloud)    │
+└─────────────┘      └──────────────┘
+```
+
+---
+
+## 🗺️ Arquitetura de Rotas
+
+### React Router
+
+O sistema utiliza **React Router** para gerenciar múltiplas páginas dentro da SPA.
+
+**Estrutura de Rotas**:
+```
+/               → Home (página inicial)
+/dashboard      → Dashboard (contribuições e ações)
+/charts         → Charts (gráficos e visualizações)
+```
+
+**Rotas Protegidas**:
+- Rotas que requerem autenticação usam `ProtectedRoute` ou verificação de `useAuth`
+- Usuários não autenticados são redirecionados para login
+
+**Benefícios**:
+- Separação clara de funcionalidades por página
+- Navegação intuitiva (URLs significativas)
+- Histórico do navegador funcional
+- Deep linking (acesso direto a páginas específicas)
+
+---
+
+## 📊 Visualização de Dados
+
+### Apache ECharts
+
+O sistema utiliza **Apache ECharts** para criar gráficos interativos e profissionais.
+
+**Tipos de Gráficos Utilizados**:
+- **Gráfico de linha**: Evolução temporal das contribuições
+- **Gráfico de barras**: Contribuições por usuário
+- **Gráfico de pizza**: Distribuição de contribuições
+- **Gráfico de área**: Estoque ao longo do tempo
+
+**Características**:
+- Interatividade nativa (hover, zoom, etc.)
+- Responsivo por padrão
+- Personalização visual completa
+- Performance otimizada
+
+**Integração**:
+- ECharts é inicializado no `useEffect` dos componentes de gráficos
+- Dados vêm do Firestore via services
+- Atualização automática quando dados mudam
+
+---
+
+## 📊 Decisões de Design
+
+### 1. Por que SPA com React Router?
+
+- **Performance**: Carrega uma vez, navegação instantânea
+- **Organização**: Separação clara de funcionalidades em páginas distintas
+- **UX**: URLs significativas e histórico do navegador
+- **GitHub Pages**: Ideal para SPAs estáticas com fallback SPA
+
+### 2. Por que Firebase?
+
+- **Sem servidor**: Não precisa de backend próprio
+- **Gratuito**: Plano free suficiente para este projeto
+- **Autenticação pronta**: Google Auth integrado
+- **Tempo real**: Firestore atualiza automaticamente
+
+### 3. Por que Custom Hooks?
+
+- **Reutilização**: Lógica compartilhada facilmente
+- **Testabilidade**: Hooks isolados são mais fáceis de testar
+- **Organização**: Separa lógica de apresentação
+
+---
+
+## 🔮 Melhorias Futuras
+
+### Arquitetura
+
+- **Context API**: Para estado global mais complexo
+- **Lazy Loading**: Code splitting por rota (carregar páginas sob demanda)
+- **Error Boundaries**: Captura de erros por rota
+- **Otimizações**: Performance e bundle size
+
+### Funcionalidades com ECharts
+
+- **Gráficos em tempo real**: Atualização automática quando novos dados chegam
+- **Exportação**: Salvar gráficos como imagem
+- **Filtros interativos**: Filtrar dados diretamente nos gráficos
+- **Comparações**: Comparar períodos diferentes
+
+### Funcionalidades
+
+- **Upload de imagens**: Para evidências de compra (Google Drive - pasta compartilhada)
+- **Edição de contribuições**: Modal completo para editar contribuições existentes
+- **Notificações**: Alertas de café acabando
+- **Relatórios**: Gráficos e estatísticas avançadas
+
+---
+
+**Última atualização**: Dezembro 2024
+
