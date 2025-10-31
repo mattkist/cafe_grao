@@ -34,6 +34,7 @@ export function Home() {
   })
   const [allContributions, setAllContributions] = useState([])
   const [calculationBaseMonths, setCalculationBaseMonths] = useState(6)
+  const [allUsers, setAllUsers] = useState([])
 
   const loadData = async () => {
     if (!user) return
@@ -60,7 +61,7 @@ export function Home() {
       const startDate = new Date()
       startDate.setMonth(startDate.getMonth() - baseMonths)
 
-      // Calculate collaborators ranking
+      // Calculate collaborators ranking - include all users even with 0
       const collaboratorsRanking = users.map(user => {
         const userContribs = allContribs.filter(c => {
           const contribDate = c.purchaseDate?.toDate?.() || new Date(c.purchaseDate)
@@ -70,12 +71,15 @@ export function Home() {
         const totalKg = userContribs.reduce((sum, c) => sum + (c.quantityKg || 0), 0)
         
         return {
+          userId: user.id,
           name: user.name,
+          photoURL: user.photoURL,
           totalKg
         }
-      }).filter(c => c.totalKg > 0)
+      }) // Include all users, don't filter out zeros
 
       setCollaboratorsData(collaboratorsRanking)
+      setAllUsers(users) // Store users for chart component
 
       // Calculate indicators
       const allKg = allContribs.reduce((sum, c) => sum + (c.quantityKg || 0), 0)
@@ -146,8 +150,11 @@ export function Home() {
             gap: '16px'
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             <h1 style={{ fontSize: '32px', color: '#8B4513', margin: 0 }}>CAFÉ GRÃO</h1>
+            <p style={{ fontSize: '14px', color: '#666', margin: 0, fontStyle: 'italic' }}>
+              Controle Automático de Fornecimento, Estoque e Gerenciamento de Registro e Abastecimento Operacional
+            </p>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
@@ -307,8 +314,9 @@ export function Home() {
           {/* Alerts will be implemented here */}
         </div>
 
-        {/* Dashboard Cards */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '24px' }}>
+        {/* Dashboard Cards - First Row */}
+        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '24px', marginBottom: '24px' }}>
+          {/* Colaboradores - 2 columns */}
           <div
             style={{
               background: 'rgba(255, 255, 255, 0.95)',
@@ -320,9 +328,10 @@ export function Home() {
             <h2 style={{ fontSize: '20px', color: '#8B4513', marginBottom: '16px' }}>
               Colaboradores
             </h2>
-            <CollaboratorsChart data={collaboratorsData} />
+            <CollaboratorsChart data={collaboratorsData} users={allUsers} />
           </div>
 
+          {/* Indicadores - 1 column */}
           <div
             style={{
               background: 'rgba(255, 255, 255, 0.95)',
@@ -367,7 +376,11 @@ export function Home() {
               </div>
             </div>
           </div>
+        </div>
 
+        {/* Dashboard Cards - Second Row */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '24px' }}>
+          {/* Linha do Tempo - 3 columns (full width) */}
           <div
             style={{
               background: 'rgba(255, 255, 255, 0.95)',

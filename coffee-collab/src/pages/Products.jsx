@@ -3,12 +3,14 @@ import { useEffect, useState } from 'react'
 import { Layout } from '../components/Layout'
 import { getAllProducts } from '../services/productService'
 import { NewProductModal } from '../components/NewProductModal'
+import { EditProductModal } from '../components/EditProductModal'
 import { ensureImageUrl } from '../services/googleDriveService'
 
 export function Products() {
   const [products, setProducts] = useState([])
   const [loading, setLoading] = useState(true)
   const [showNewProductModal, setShowNewProductModal] = useState(false)
+  const [editingProductId, setEditingProductId] = useState(null)
 
   const loadProducts = async () => {
     try {
@@ -128,7 +130,7 @@ export function Products() {
                     </div>
                   </div>
                   <button
-                    onClick={() => alert('Edição será implementada')}
+                    onClick={() => setEditingProductId(product.id)}
                     style={{
                       padding: '8px 16px',
                       background: '#FFF',
@@ -151,10 +153,21 @@ export function Products() {
         isOpen={showNewProductModal}
         onClose={() => setShowNewProductModal(false)}
         onSuccess={() => {
-          // Reload products
           loadProducts()
         }}
       />
+
+      {editingProductId && (
+        <EditProductModal
+          isOpen={!!editingProductId}
+          productId={editingProductId}
+          onClose={() => setEditingProductId(null)}
+          onSuccess={() => {
+            loadProducts()
+            setEditingProductId(null)
+          }}
+        />
+      )}
     </Layout>
   )
 }

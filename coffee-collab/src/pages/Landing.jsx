@@ -5,7 +5,7 @@ import { useAuth } from '../hooks/useAuth'
 import { getOrCreateUserProfile, getUserProfile } from '../services/userService'
 
 const acronimoColors = ['#8B4513', '#A0522D', '#D2691E', '#DEB887', '#F5DEB3', '#DAA520', '#A0522D', '#8B4513']
-const acronimoLetters = ['C', 'A', 'F', 'É', 'G', 'R', 'Ã', 'O']
+const acronimoLetters = ['C', 'A', 'F', 'E', 'G', 'R', 'A', 'O']
 
 // Function to highlight uppercase letters in text
 function highlightUppercaseLetters(text) {

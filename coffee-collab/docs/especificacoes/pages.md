@@ -57,9 +57,14 @@ Este documento detalha cada página/tela do sistema, seus componentes, comportam
 ┌─────────────────────────────────────┐
 │  [Menu Lateral]                     │
 │                                     │
-│  Mensagem com tema de café:         │
-│  "Você foi cadastrado mas precisa  │
-│   ser ativado por um administrador" │
+│  ☕ Espera aí, meu chapa!            │
+│                                     │
+│  Mensagem descontraída e piadista   │
+│  sobre café e espera com humor      │
+│  sobre a situação de aguardar       │
+│  ativação...                        │
+│                                     │
+│  [Botão Sair]                       │
 │                                     │
 │  ┌─────────────────────────────┐   │
 │  │ Administradores:             │   │
@@ -73,18 +78,28 @@ Este documento detalha cada página/tela do sistema, seus componentes, comportam
 └─────────────────────────────────────┘
 ```
 
+### Elementos Visuais
+- **Título**: "☕ Espera aí, meu chapa!" - Tom descontraído
+- **Mensagem**: Texto piadista sobre café e espera, com piadas sobre:
+  - Esperar como esperar para fazer café sem grãos
+  - "A melhor forma de esperar é... esperando com um cafezinho na mão!"
+  - Administradores como "baristas chefes"
+- **Botão Sair**: Permite logout e retorno à página inicial
+
 ### Comportamento
-- Exibe mensagem com tema cômico de café
+- Exibe mensagem com tema cômico de café e piadas sobre espera
 - Lista todos os usuários com `isAdmin: true`
 - Card para cada admin mostra:
   - Foto (ou placeholder)
   - Nome
   - Email
 - Card com estilo bonito e destaque visual
+- **Botão Sair**: Faz logout e redireciona para `/`
 
 ### Regras
-- Não permite ações (apenas visualização)
+- Permite logout via botão "Sair"
 - Usuário deve aguardar ativação por admin
+- Após logout, pode fazer login novamente (mas continua inativo até ser ativado)
 
 ---
 
@@ -102,7 +117,7 @@ Este documento detalha cada página/tela do sistema, seus componentes, comportam
 ```
 ┌─────────────────────────────────────────────────────┐
 │  CAFÉ GRÃO                    [Foto] João Silva   │
-│                                                     │
+│  Controle Automático de Fornecimento, Estoque...   │
 │  Total Contribuições: R$ 250,00                    │
 │  Total KGs: 5.5 kg                                  │
 │                                                     │
@@ -112,6 +127,7 @@ Este documento detalha cada página/tela do sistema, seus componentes, comportam
 
 **Elementos do Header**:
 - **Nome do sistema**: "CAFÉ GRÃO" (esquerda)
+- **Slogan**: "Controle Automático de Fornecimento, Estoque e Gerenciamento de Registro e Abastecimento Operacional" (logo abaixo do título, em itálico e tamanho menor)
 - **Foto do usuário**: Circular, clicável (vai para Settings)
 - **Nome do usuário**: Ao lado da foto
 - **Total de Contribuições**: Valor total já contribuído pelo usuário
@@ -569,6 +585,33 @@ Este documento detalha cada página/tela do sistema, seus componentes, comportam
 - Transição suave
 - Persiste estado (opcional: localStorage)
 - Itens marcados como `adminOnly` só aparecem para usuários com `isAdmin: true`
+
+---
+
+## 🦶 Footer
+
+### Elementos
+
+O footer aparece fixo na parte inferior de todas as páginas que usam o componente `Layout`.
+
+**Elementos do Footer**:
+- **Nome e slogan**: "☕ CAFÉ GRÃO - Controle Automático de Fornecimento, Estoque e Gerenciamento de Registro e Abastecimento Operacional"
+- **Créditos**: "Feito com ❤️ e muito ☕ | [Ano atual]"
+
+### Características
+
+- **Posição**: Fixo na parte inferior (`position: fixed`)
+- **Largura**: Do menu lateral até a borda direita da tela
+- **Background**: Cor marrom translúcida (`rgba(139, 69, 19, 0.95)`)
+- **Texto**: Branco com opacidade variável
+- **Espaçamento**: Padding adequado para não sobrepor conteúdo
+- **Z-index**: 100 (fica acima do conteúdo mas abaixo de modais)
+
+### Layout
+
+- **Estrutura**: Flexbox com espaçamento entre elementos
+- **Responsivo**: Quebra em telas menores (`flexWrap: wrap`)
+- **Padding do conteúdo**: O `main` tem `paddingBottom: 80px` para evitar sobreposição com o footer
 
 ---
 

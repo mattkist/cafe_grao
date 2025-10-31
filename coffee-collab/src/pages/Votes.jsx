@@ -60,25 +60,37 @@ export function Votes() {
 
   const renderStars = (productId, currentRating) => {
     const stars = []
-    for (let i = 0.5; i <= 5; i += 0.5) {
+    const handleStarClick = (rating) => {
+      handleVote(productId, rating)
+    }
+    
+    for (let i = 1; i <= 5; i++) {
+      const isFilled = i <= currentRating
       stars.push(
         <span
           key={i}
-          onClick={() => handleVote(productId, i)}
+          onClick={() => handleStarClick(i)}
           style={{
-            fontSize: '24px',
+            fontSize: '32px',
             cursor: 'pointer',
-            color: i <= currentRating ? '#FFD700' : '#DDD',
-            transition: 'transform 150ms ease'
+            color: isFilled ? '#FFD700' : '#DDD',
+            transition: 'all 150ms ease',
+            userSelect: 'none'
           }}
           onMouseEnter={(e) => {
-            e.currentTarget.style.transform = 'scale(1.2)'
+            if (!isFilled) {
+              e.currentTarget.style.transform = 'scale(1.1)'
+              e.currentTarget.style.color = '#FFD700'
+            }
           }}
           onMouseLeave={(e) => {
             e.currentTarget.style.transform = 'scale(1)'
+            if (!isFilled) {
+              e.currentTarget.style.color = '#DDD'
+            }
           }}
         >
-          {i % 1 === 0 ? '⭐' : '✦'}
+          ★
         </span>
       )
     }
@@ -167,7 +179,7 @@ export function Votes() {
                     </div>
                   </div>
                   
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
                     {renderStars(product.id, userVote)}
                   </div>
                 </div>

@@ -45,7 +45,9 @@ O **CAFÉ GRÃO** é uma **Single Page Application (SPA)** que roda completament
 ```
 src/
 ├── components/          # Componentes React reutilizáveis
-│   └── LoginButton.jsx # Componente de autenticação
+│   ├── Layout.jsx       # Componente de layout com sidebar e footer
+│   ├── Sidebar.jsx      # Menu lateral navegável
+│   └── LoginButton.jsx  # Componente de autenticação
 │
 ├── pages/              # Páginas/rotas da aplicação
 │   ├── Home.jsx        # Página inicial

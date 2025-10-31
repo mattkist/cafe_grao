@@ -5,11 +5,14 @@ import { useAuth } from '../hooks/useAuth'
 import { getAllContributions } from '../services/contributionService'
 import { getActiveUsers } from '../services/userService'
 import { getAllProducts, getProductById } from '../services/productService'
+import { useUserProfile } from '../hooks/useUserProfile'
 import { NewContributionModal } from '../components/NewContributionModal'
 import { EditContributionModal } from '../components/EditContributionModal'
+import { deleteContribution } from '../services/contributionService'
 
 export function Contributions() {
   const { user } = useAuth()
+  const { profile } = useUserProfile()
   const [contributions, setContributions] = useState([])
   const [usersMap, setUsersMap] = useState({})
   const [productsMap, setProductsMap] = useState({})
@@ -50,6 +53,31 @@ export function Contributions() {
   useEffect(() => {
     loadContributions()
   }, [])
+
+  const handleDelete = async (contributionId, contributionUserId) => {
+    if (!user) return
+    
+    // Check permissions: admins can delete all, others can only delete their own
+    const canDelete = profile?.isAdmin || (contributionUserId === user.uid)
+    
+    if (!canDelete) {
+      alert('Você não tem permissão para deletar esta contribuição.')
+      return
+    }
+
+    if (!confirm('Tem certeza que deseja deletar esta contribuição?')) {
+      return
+    }
+
+    try {
+      await deleteContribution(contributionId)
+      loadContributions()
+      alert('Contribuição deletada com sucesso!')
+    } catch (error) {
+      console.error('Error deleting contribution:', error)
+      alert('Erro ao deletar contribuição. Tente novamente.')
+    }
+  }
 
   if (loading) {
     return (
@@ -104,9 +132,10 @@ export function Contributions() {
           <div style={{ display: 'grid', gap: '16px' }}>
             {contributions.map((contribution) => {
               const purchaseDate = contribution.purchaseDate?.toDate?.() || new Date(contribution.purchaseDate)
-              const user = usersMap[contribution.userId]
+              const contributionUser = usersMap[contribution.userId]
               const product = productsMap[contribution.productId]
-              const canEdit = user && (contribution.userId === user?.id || user?.isAdmin)
+              const canEdit = user && (contribution.userId === user.uid || profile?.isAdmin)
+              const canDelete = user && (contribution.userId === user.uid || profile?.isAdmin)
               
               return (
                 <div
@@ -121,10 +150,10 @@ export function Contributions() {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', gap: '16px' }}>
                     <div style={{ flex: 1 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
-                        {user?.photoURL && (
+                        {contributionUser?.photoURL && (
                           <img
-                            src={user.photoURL}
-                            alt={user.name}
+                            src={contributionUser.photoURL}
+                            alt={contributionUser.name}
                             style={{
                               width: '40px',
                               height: '40px',
@@ -135,7 +164,7 @@ export function Contributions() {
                         )}
                         <div>
                           <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#8B4513' }}>
-                            {user?.name || 'Usuário desconhecido'}
+                            {contributionUser?.name || 'Usuário desconhecido'}
                           </div>
                           <div style={{ fontSize: '14px', color: '#666' }}>
                             {purchaseDate.toLocaleDateString('pt-BR')}
@@ -168,21 +197,41 @@ export function Contributions() {
                         </div>
                       </div>
                     </div>
-                    {canEdit && (
-                      <button
-                        onClick={() => setEditingContributionId(contribution.id)}
-                        style={{
-                          padding: '8px 16px',
-                          background: '#FFF',
-                          color: '#8B4513',
-                          border: '2px solid #8B4513',
-                          borderRadius: '8px',
-                          cursor: 'pointer',
-                          whiteSpace: 'nowrap'
-                        }}
-                      >
-                        Editar
-                      </button>
+                    {(canEdit || canDelete) && (
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        {canEdit && (
+                          <button
+                            onClick={() => setEditingContributionId(contribution.id)}
+                            style={{
+                              padding: '8px 16px',
+                              background: '#FFF',
+                              color: '#8B4513',
+                              border: '2px solid #8B4513',
+                              borderRadius: '8px',
+                              cursor: 'pointer',
+                              whiteSpace: 'nowrap'
+                            }}
+                          >
+                            Editar
+                          </button>
+                        )}
+                        {canDelete && (
+                          <button
+                            onClick={() => handleDelete(contribution.id, contribution.userId)}
+                            style={{
+                              padding: '8px 16px',
+                              background: '#DC3545',
+                              color: '#FFF',
+                              border: 'none',
+                              borderRadius: '8px',
+                              cursor: 'pointer',
+                              whiteSpace: 'nowrap'
+                            }}
+                          >
+                            Deletar
+                          </button>
+                        )}
+                      </div>
                     )}
                   </div>
                 </div>

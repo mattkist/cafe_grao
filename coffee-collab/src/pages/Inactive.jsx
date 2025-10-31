@@ -1,14 +1,25 @@
 // Inactive user page
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Layout } from '../components/Layout'
 import { useAuth } from '../hooks/useAuth'
 import { getUserProfile, getAllAdmins } from '../services/userService'
 
 export function Inactive() {
-  const { user } = useAuth()
+  const { user, signOut } = useAuth()
+  const navigate = useNavigate()
   const [userProfile, setUserProfile] = useState(null)
   const [admins, setAdmins] = useState([])
   const [loading, setLoading] = useState(true)
+
+  const handleLogout = async () => {
+    try {
+      await signOut()
+      navigate('/')
+    } catch (error) {
+      console.error('Error signing out:', error)
+    }
+  }
 
   useEffect(() => {
     const loadData = async () => {
@@ -64,13 +75,51 @@ export function Inactive() {
           }}
         >
           <h1 style={{ fontSize: '32px', color: '#8B4513', marginBottom: '16px' }}>
-            ☕ Aguardando Ativação
+            ☕ Espera aí, meu chapa!
           </h1>
-          <p style={{ fontSize: '18px', color: '#666', lineHeight: '1.6', marginBottom: '24px' }}>
-            Você foi cadastrado no sistema CAFÉ GRÃO, mas ainda precisa ser ativado por um administrador.
-            <br />
-            Enquanto isso, aproveite para conhecer nosso time! 🎉
-          </p>
+          <div style={{ fontSize: '18px', color: '#666', lineHeight: '1.8', marginBottom: '24px' }}>
+            <p style={{ marginBottom: '16px' }}>
+              Você foi cadastrado no sistema CAFÉ GRÃO, mas ainda precisa ser ativado por um administrador. 
+              É tipo quando você vai fazer café e esquece que não comprou os grãos ainda... a espera é real! 😅
+            </p>
+            <p style={{ marginBottom: '16px', fontStyle: 'italic' }}>
+              "A melhor forma de esperar é... esperando com um cafezinho na mão!" ☕
+              <br />
+              Mas como você não pode fazer café ainda, vai ter que esperar mesmo! 🤷‍♂️
+            </p>
+            <p style={{ marginBottom: '16px' }}>
+              Enquanto isso, aproveite para conhecer nosso time de administradores que controlam quem pode 
+              contribuir para nosso estoque de café! Eles são tipo os baristas chefes do sistema. 👨‍🍳
+            </p>
+            <p style={{ fontWeight: 'bold', color: '#8B4513' }}>
+              Fica de olho! Assim que um deles te ativar, você já pode começar a registrar suas contribuições! 🚀
+            </p>
+          </div>
+          <button
+            onClick={handleLogout}
+            style={{
+              padding: '12px 24px',
+              background: 'linear-gradient(135deg, #A0522D 0%, #D2691E 100%)',
+              color: '#FFF',
+              border: 'none',
+              borderRadius: '8px',
+              fontSize: '16px',
+              fontWeight: 'bold',
+              cursor: 'pointer',
+              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.2)',
+              transition: 'all 150ms ease'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = 'translateY(-2px)'
+              e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.3)'
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = 'translateY(0)'
+              e.currentTarget.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.2)'
+            }}
+          >
+            Sair
+          </button>
         </div>
 
         <div
