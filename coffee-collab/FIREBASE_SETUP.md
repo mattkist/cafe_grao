@@ -86,6 +86,45 @@ Como o `.env` não é publicado no GitHub Pages, você precisa configurar **GitH
 
 ---
 
+## 🔐 Configurar Domínios Autorizados no Firebase
+
+⚠️ **CRÍTICO**: Para que a autenticação funcione corretamente no GitHub Pages (ou qualquer outro domínio), você **DEVE** adicionar os domínios à lista de domínios autorizados no Firebase.
+
+### Passos para Configurar:
+
+1. Acesse o [Firebase Console](https://console.firebase.google.com/)
+2. Selecione o projeto `cafe-grao` (ou seu projeto)
+3. Vá em **Authentication** → **Settings** → **Authorized domains** (ou **Domínios autorizados**)
+4. Verifique se os seguintes domínios estão na lista:
+   - `localhost` (já deve estar por padrão)
+   - `mattkist.github.io` (ou seu domínio do GitHub Pages)
+   - Qualquer outro domínio onde você pretende fazer deploy
+5. Se algum domínio não estiver na lista:
+   - Clique em **"Add domain"** (ou **"Adicionar domínio"**)
+   - Digite o domínio (ex: `mattkist.github.io`)
+   - Clique em **"Add"** (ou **"Adicionar"**)
+
+### Domínios Necessários:
+
+Para o GitHub Pages especificamente, você precisa adicionar:
+- `mattkist.github.io` (domínio raiz do GitHub Pages)
+
+⚠️ **IMPORTANTE**: 
+- Não inclua o caminho `/cafe_grao/` - apenas o domínio raiz
+- O Firebase valida o domínio completo, então `mattkist.github.io` autoriza todas as subpastas
+- Se você usar um domínio customizado no futuro, também precisará adicioná-lo aqui
+
+### Erro Comum:
+
+Se você receber o erro:
+```
+Firebase: Error (auth/unauthorized-domain).
+```
+
+Isso significa que o domínio atual não está na lista de domínios autorizados. Adicione-o seguindo os passos acima.
+
+---
+
 ## ⚠️ IMPORTANTE: Configurar as Regras de Segurança
 
 As regras de segurança do Firestore **DEVEM** ser configuradas no console do Firebase para que o sistema funcione corretamente.

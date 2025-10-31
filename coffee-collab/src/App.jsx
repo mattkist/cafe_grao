@@ -36,7 +36,7 @@ export function App() {
   }
 
   return (
-    <BrowserRouter>
+    <BrowserRouter basename={import.meta.env.MODE === 'production' ? '/cafe_grao' : undefined}>
       <Routes>
         <Route path="/" element={<Landing />} />
         <Route

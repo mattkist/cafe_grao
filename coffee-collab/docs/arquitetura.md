@@ -209,13 +209,25 @@ Armazena todas as contribuições (compartilhadas entre todos os usuários).
 
 ### Base Path Condicional
 
+**Configuração no Vite** (`vite.config.js`):
+
 ```javascript
 base: mode === 'production' ? '/cafe_grao/' : '/'
 ```
 
+**Configuração no React Router** (`App.jsx`):
+
+```javascript
+<BrowserRouter basename={import.meta.env.MODE === 'production' ? '/cafe_grao' : undefined}>
+```
+
 **Decisão**: Em desenvolvimento local, base é `/` (raiz). Em produção (GitHub Pages), base é `/cafe_grao/`.
 
-**Por quê**: GitHub Pages serve o app em um subpath (`/cafe_grao/`), mas localmente roda na raiz.
+**Por quê**: 
+- GitHub Pages serve o app em um subpath (`/cafe_grao/`), mas localmente roda na raiz
+- O Vite precisa saber o base path para gerar os links corretos dos assets
+- O React Router precisa saber o basename para manter as rotas corretas durante navegação
+- **IMPORTANTE**: Sem o `basename` no Router, a URL pode mudar para a raiz (`https://mattkist.github.io/`) ao navegar
 
 ---
 
@@ -257,6 +269,8 @@ match /contributions/{docId} {
 **Produção (GitHub Pages):**
 - Configure GitHub Secrets com todas as variáveis `VITE_*`
 - Variáveis necessárias: Firebase (7 variáveis) + Google OAuth (2 variáveis)
+- **CRÍTICO**: Configure domínios autorizados no Firebase (veja `FIREBASE_SETUP.md`)
+  - Adicione `mattkist.github.io` em Authentication → Settings → Authorized domains
 - Veja `FIREBASE_SETUP.md` e `GOOGLE_DRIVE_SETUP.md` para detalhes
 
 ### Fluxo de Deploy
