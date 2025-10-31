@@ -5,14 +5,15 @@ import { getFirestore } from 'firebase/firestore'
 import { getStorage } from 'firebase/storage'
 
 // Your web app's Firebase configuration
+// All values are loaded from environment variables
 const firebaseConfig = {
-  apiKey: "AIzaSyBVBDzDz8KLOH9aC7y9LYoqBx1C3nHpNrk",
-  authDomain: "cafe-grao.firebaseapp.com",
-  projectId: "cafe-grao",
-  storageBucket: "cafe-grao.firebasestorage.app",
-  messagingSenderId: "64336046043",
-  appId: "1:64336046043:web:b409b6a85cec9a7e7969fe",
-  measurementId: "G-HG1KHBHVVL"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
 }
 
 // Initialize Firebase

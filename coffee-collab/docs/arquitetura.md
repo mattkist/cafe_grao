@@ -62,7 +62,8 @@ src/
 │   └── contributionService.js   # Operações de contribuições
 │
 ├── lib/                # Configurações e utilitários
-│   └── firebase.js     # Configuração do Firebase
+│   ├── firebase.js     # Configuração do Firebase (usa variáveis de ambiente)
+│   └── googleDrive.js # Configuração do Google Drive (usa variáveis de ambiente)
 │
 ├── App.jsx             # Componente raiz (configuração de rotas)
 └── main.jsx            # Entry point (ponto de entrada)
@@ -245,6 +246,19 @@ match /contributions/{docId} {
 
 ## 🚀 Deploy
 
+### Configuração de Variáveis de Ambiente
+
+⚠️ **IMPORTANTE**: Antes do deploy, configure todas as variáveis de ambiente:
+
+**Desenvolvimento Local:**
+- Crie arquivo `.env` na pasta `coffee-collab/` com todas as variáveis necessárias
+- Veja `.env.example` como template
+
+**Produção (GitHub Pages):**
+- Configure GitHub Secrets com todas as variáveis `VITE_*`
+- Variáveis necessárias: Firebase (7 variáveis) + Google OAuth (2 variáveis)
+- Veja `FIREBASE_SETUP.md` e `GOOGLE_DRIVE_SETUP.md` para detalhes
+
 ### Fluxo de Deploy
 
 ```
@@ -253,6 +267,8 @@ match /contributions/{docId} {
 2. GitHub Actions triggera workflow
    ↓
 3. Build: `npm run build` (Vite compila para `dist/`)
+   - GitHub Secrets são injetadas como variáveis de ambiente
+   - Vite embute variáveis no JavaScript final
    ↓
 4. Copia `index.html` para `404.html` (fallback SPA)
    ↓

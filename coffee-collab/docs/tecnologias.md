@@ -76,6 +76,11 @@ Este documento descreve todas as tecnologias, bibliotecas e ferramentas utilizad
 - Queries e ordenação de dados
 - Regras de segurança para controle de acesso
 
+**Configuração**:
+- Todas as configurações do Firebase são carregadas via variáveis de ambiente
+- Variáveis necessárias: `VITE_FIREBASE_*` (7 variáveis no total)
+- Veja `FIREBASE_SETUP.md` para instruções detalhadas
+
 #### Google Drive (Armazenamento de Imagens)
 
 **O que faz**: Armazenamento de imagens em pasta compartilhada do Google Drive pessoal.

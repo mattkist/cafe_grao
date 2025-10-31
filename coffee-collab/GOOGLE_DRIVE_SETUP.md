@@ -99,17 +99,40 @@ Este guia explica como configurar o upload automático de imagens para o Google 
 2. Adicione as seguintes variáveis:
 
 ```env
+# Google OAuth (para Google Drive)
 VITE_GOOGLE_CLIENT_ID=seu-id-do-cliente-aqui
 VITE_GOOGLE_DRIVE_FOLDER_ID=seu-id-da-pasta-aqui
+
+# Firebase Configuration (obrigatório)
+# Veja instruções detalhadas em FIREBASE_SETUP.md
+VITE_FIREBASE_API_KEY=sua-api-key-aqui
+VITE_FIREBASE_AUTH_DOMAIN=seu-projeto.firebaseapp.com
+VITE_FIREBASE_PROJECT_ID=seu-projeto-id
+VITE_FIREBASE_STORAGE_BUCKET=seu-projeto.firebasestorage.app
+VITE_FIREBASE_MESSAGING_SENDER_ID=seu-sender-id
+VITE_FIREBASE_APP_ID=seu-app-id
+VITE_FIREBASE_MEASUREMENT_ID=seu-measurement-id
 ```
 
-**Exemplo:**
+**Exemplo com valores do projeto atual:**
 ```env
+# Firebase Configuration
+VITE_FIREBASE_API_KEY=AIzaSyB654645aC7y9LYoqBx1C3nHpNrk
+VITE_FIREBASE_AUTH_DOMAIN=seila.firebaseapp.com
+VITE_FIREBASE_PROJECT_ID=seila
+VITE_FIREBASE_STORAGE_BUCKET=seila.firebasestorage.app
+VITE_FIREBASE_MESSAGING_SENDER_ID=6433654783
+VITE_FIREBASE_APP_ID=1:62356046043:web:b409b6af5c4a7e7969fe
+VITE_FIREBASE_MEASUREMENT_ID=G-HG1KHBHWHG
+
+# Google OAuth (para Google Drive)
 VITE_GOOGLE_CLIENT_ID=123456789-abcdefg.apps.googleusercontent.com
 VITE_GOOGLE_DRIVE_FOLDER_ID=1a2b3c4d5e6f7g8h9i0j
 ```
 
 ⚠️ **NÃO** commite o arquivo `.env` no Git! Ele já deve estar no `.gitignore`.
+
+💡 **Dica**: Você pode copiar o arquivo `.env.example` como base e preencher com seus valores.
 
 ### 5.2. Produção no GitHub Pages
 
@@ -119,10 +142,28 @@ Como o `.env` não é publicado no GitHub Pages, você precisa configurar **GitH
 2. Vá em **Settings** → **Secrets and variables** → **Actions**
 3. Clique em **"New repository secret"**
 4. Crie os seguintes secrets:
+
+   **Google OAuth (para Google Drive):**
    - **Nome**: `VITE_GOOGLE_CLIENT_ID`
      - **Valor**: Cole o ID do cliente OAuth que você obteve no Passo 3
    - **Nome**: `VITE_GOOGLE_DRIVE_FOLDER_ID`
      - **Valor**: Cole o ID da pasta do Google Drive que você obteve no Passo 4
+
+   **Firebase (obrigatório):**
+   - **Nome**: `VITE_FIREBASE_API_KEY`
+     - **Valor**: Sua Firebase API Key (veja `FIREBASE_SETUP.md` para obter)
+   - **Nome**: `VITE_FIREBASE_AUTH_DOMAIN`
+     - **Valor**: Seu domínio de autenticação do Firebase
+   - **Nome**: `VITE_FIREBASE_PROJECT_ID`
+     - **Valor**: ID do seu projeto Firebase
+   - **Nome**: `VITE_FIREBASE_STORAGE_BUCKET`
+     - **Valor**: Bucket de armazenamento do Firebase
+   - **Nome**: `VITE_FIREBASE_MESSAGING_SENDER_ID`
+     - **Valor**: Sender ID do Firebase
+   - **Nome**: `VITE_FIREBASE_APP_ID`
+     - **Valor**: App ID do Firebase
+   - **Nome**: `VITE_FIREBASE_MEASUREMENT_ID`
+     - **Valor**: Measurement ID do Firebase (Analytics)
 
 ⚠️ **Importante**: Os nomes dos secrets devem ser **EXATAMENTE** como acima (com `VITE_` no início).
 
