@@ -16,7 +16,11 @@ import {
 } from 'firebase/firestore'
 import { db } from '../lib/firebase'
 import { getUserProfile, updateUserProfile } from './userService'
-import { shouldTriggerCompensation, executeAutomaticCompensation } from './compensationService'
+import {
+  shouldTriggerCompensation,
+  executeAutomaticCompensation,
+  isContributionCompensated
+} from './compensationService'
 import { getCakeValue } from './configurationService'
 
 /**
@@ -49,6 +53,13 @@ export async function createContribution(contributionData) {
         throw new Error('Valor deve ser maior que zero para bolos comprados')
       }
       quantityCakes = value / cakeValue
+    }
+
+    const purchaseDateObj = new Date(contributionData.purchaseDate)
+    if (await isContributionCompensated(purchaseDateObj)) {
+      throw new Error(
+        'Não é permitido registrar contribuição com data igual ou anterior à última compensação. O histórico desse período está encerrado.'
+      )
     }
     
     // Prepare data before batch operations
@@ -265,6 +276,12 @@ export async function updateContribution(contributionId, updates) {
   }
 
   try {
+    if (await isContributionCompensated(contribution.purchaseDate)) {
+      throw new Error(
+        'Não é permitido alterar contribuições com data igual ou anterior à última compensação. O histórico desse período está encerrado.'
+      )
+    }
+
     const contributionRef = doc(db, 'contributions', contributionId)
     
     // Get cake value for calculation (only if not homemade)
@@ -282,6 +299,7 @@ export async function updateContribution(contributionId, updates) {
       ...updates,
       updatedAt: serverTimestamp()
     }
+    delete updateData.skipBalanceUpdate
     
     if (isHomemadeCake) {
       // Homemade cake: value is 0, quantity is manual
@@ -323,19 +341,21 @@ export async function updateContribution(contributionId, updates) {
     
     // Convert dates to Timestamps if present
     if (updates.purchaseDate) {
-      updateData.purchaseDate = Timestamp.fromDate(new Date(updates.purchaseDate))
+      const newPurchaseDate = new Date(updates.purchaseDate)
+      if (await isContributionCompensated(newPurchaseDate)) {
+        throw new Error(
+          'Não é permitido definir a data da compra em período já compensado (data igual ou anterior à última compensação).'
+        )
+      }
+      updateData.purchaseDate = Timestamp.fromDate(newPurchaseDate)
     }
     
     const isDivided = updates.isDivided !== undefined ? updates.isDivided : (contribution.isDivided || false)
     const participantUserIds = updates.participantUserIds || []
-    const skipBalanceUpdate = updates.skipBalanceUpdate || false
-    
-    // Remove skipBalanceUpdate from updateData as it's not a field to save
-    delete updateData.skipBalanceUpdate
     
     // Prepare user profiles before batch (if needed)
     let userProfiles = []
-    if (!skipBalanceUpdate && isDivided && participantUserIds.length > 0) {
+    if (isDivided && participantUserIds.length > 0) {
       const allParticipants = [...new Set([contribution.userId, ...participantUserIds])]
       userProfiles = await Promise.all(
         allParticipants.map(userId => getUserProfile(userId))
@@ -348,8 +368,8 @@ export async function updateContribution(contributionId, updates) {
     // Update contribution document
     batch.update(contributionRef, updateData)
     
-    // Handle divided contribution changes (only if not skipping balance updates)
-    if (!skipBalanceUpdate && isDivided && participantUserIds.length > 0) {
+    // Handle divided contribution changes
+    if (isDivided && participantUserIds.length > 0) {
       // Delete old details
       const detailsRef = collection(db, 'contributions', contributionId, 'contributionDetails')
       const oldDetailsSnapshot = await getDocs(detailsRef)
@@ -384,7 +404,7 @@ export async function updateContribution(contributionId, updates) {
       }
       
       updateData.isDivided = true
-    } else if (!skipBalanceUpdate && !isDivided && contribution.isDivided) {
+    } else if (!isDivided && contribution.isDivided) {
       // Was divided, now regular - delete details
       const detailsRef = collection(db, 'contributions', contributionId, 'contributionDetails')
       const oldDetailsSnapshot = await getDocs(detailsRef)
@@ -395,34 +415,26 @@ export async function updateContribution(contributionId, updates) {
       updateData.isDivided = false
     }
     
-    // If skipping balance update, still update isDivided flag if changed
-    if (skipBalanceUpdate && updates.isDivided !== undefined) {
-      updateData.isDivided = updates.isDivided
-      batch.update(contributionRef, { isDivided: updates.isDivided })
-    }
-    
     // Commit batch atomically - all or nothing
     await batch.commit()
     
-    // Reprocess all user balances to ensure accuracy (only if not skipping balance update)
+    // Reprocess all user balances to ensure accuracy
     // This recalculates from last compensation + contributions after it
     // IMPORTANT: Wait for reprocessing to complete before returning
-    if (!skipBalanceUpdate) {
-      try {
-        const { reprocessAllUserBalances } = await import('./userService')
-        const result = await reprocessAllUserBalances()
-        console.log('Balance reprocessing result:', result.message)
-      } catch (error) {
-        console.error('Error reprocessing balances:', error)
-        // Log detailed error for debugging
-        console.error('Balance reprocessing error details:', {
-          message: error.message,
-          stack: error.stack
-        })
-        // Don't fail the whole operation if balance reprocessing fails
-        // But log the error clearly so it can be debugged
-        // The balance will be corrected on next reprocessing or manual trigger
-      }
+    try {
+      const { reprocessAllUserBalances } = await import('./userService')
+      const result = await reprocessAllUserBalances()
+      console.log('Balance reprocessing result:', result.message)
+    } catch (error) {
+      console.error('Error reprocessing balances:', error)
+      // Log detailed error for debugging
+      console.error('Balance reprocessing error details:', {
+        message: error.message,
+        stack: error.stack
+      })
+      // Don't fail the whole operation if balance reprocessing fails
+      // But log the error clearly so it can be debugged
+      // The balance will be corrected on next reprocessing or manual trigger
     }
     
     // Check if compensation should be triggered
@@ -452,6 +464,11 @@ export async function updateContribution(contributionId, updates) {
  */
 export async function deleteContribution(contributionId) {
   const contribution = await getContributionById(contributionId)
+  if (contribution && (await isContributionCompensated(contribution.purchaseDate))) {
+    throw new Error(
+      'Não é permitido excluir contribuições com data igual ou anterior à última compensação. O histórico desse período está encerrado.'
+    )
+  }
   const contributionRef = doc(db, 'contributions', contributionId)
   
   // Delete contribution details if it's divided

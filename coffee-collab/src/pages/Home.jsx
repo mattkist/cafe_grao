@@ -1,6 +1,6 @@
 // Home page (Dashboard) - Most complex page
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { Layout } from '../components/Layout'
 import { useAuth } from '../hooks/useAuth'
 import { useUserProfile } from '../hooks/useUserProfile'
@@ -347,6 +347,40 @@ export function Home() {
               Sair
             </button>
           </div>
+        </div>
+
+        <div
+          style={{
+            marginBottom: '24px',
+            background: 'linear-gradient(135deg, rgba(255, 250, 240, 0.98) 0%, rgba(255, 248, 220, 0.98) 100%)',
+            borderRadius: '14px',
+            padding: '16px 22px',
+            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.12)',
+            border: '1px solid rgba(210, 180, 140, 0.85)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '14px',
+            flexWrap: 'wrap'
+          }}
+        >
+          <span style={{ fontSize: '22px', lineHeight: 1 }} aria-hidden>
+            💬
+          </span>
+          <p style={{ margin: 0, fontSize: '15px', color: '#5D4037', flex: '1 1 220px', lineHeight: 1.5 }}>
+            Possui dúvidas quanto aos saldos e quer auditar? Clique{' '}
+            <Link
+              to="/auditoria"
+              style={{
+                fontWeight: 'bold',
+                color: '#8B4513',
+                textDecoration: 'underline',
+                textUnderlineOffset: '3px'
+              }}
+            >
+              Aqui
+            </Link>
+            !
+          </p>
         </div>
 
         {/* Avisos section */}

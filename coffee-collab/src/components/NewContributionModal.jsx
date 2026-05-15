@@ -4,6 +4,7 @@ import { useAuth } from '../hooks/useAuth'
 import { useUserProfile } from '../hooks/useUserProfile'
 import { getActiveUsers } from '../services/userService'
 import { createContribution, updateContribution } from '../services/contributionService'
+import { isContributionCompensated } from '../services/compensationService'
 import { uploadContributionEvidence } from '../services/storageService'
 import { getCakeValue } from '../services/configurationService'
 
@@ -119,9 +120,21 @@ export function NewContributionModal({ isOpen, onClose, onSuccess }) {
       }
     }
 
+    if (!purchaseDate) {
+      alert('Informe a data da compra (ou do bolo).')
+      return
+    }
+
     const purchaseDateObj = new Date(purchaseDate)
     if (purchaseDateObj > new Date()) {
       alert('Data de compra não pode ser futura')
+      return
+    }
+
+    if (await isContributionCompensated(purchaseDateObj)) {
+      alert(
+        'Não é permitido registrar contribuição com data igual ou anterior à última compensação. O histórico desse período está encerrado.'
+      )
       return
     }
 
@@ -201,7 +214,12 @@ export function NewContributionModal({ isOpen, onClose, onSuccess }) {
       onClose()
     } catch (error) {
       console.error('Error creating contribution:', error)
-      alert('Erro ao criar contribuição. Tente novamente.')
+      const msg = error.message || ''
+      if (msg.includes('última compensação') || msg.includes('histórico')) {
+        alert(msg)
+      } else {
+        alert('Erro ao criar contribuição. Tente novamente.')
+      }
     } finally {
       setSaving(false)
     }

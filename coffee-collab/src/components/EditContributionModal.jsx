@@ -185,11 +185,7 @@ export function EditContributionModal({ isOpen, contributionId, onClose, onSucce
         }
       }
 
-      // Check if contribution is already compensated before updating balances
-      const contribution = await getContributionById(contributionId)
-      const wasCompensated = await isContributionCompensated(contribution.purchaseDate)
-      
-      // Update contribution
+      // Update contribution (serviço bloqueia contribuições já no período compensado)
       const updateData = {
         userId: selectedUserId || user.uid,
         purchaseDate: purchaseDate,
@@ -208,12 +204,6 @@ export function EditContributionModal({ isOpen, contributionId, onClose, onSucce
       if (newPurchaseEvidenceURL !== purchaseEvidenceURL) {
         updateData.purchaseEvidence = newPurchaseEvidenceURL
       }
-      
-      // If contribution was already compensated, don't update balances
-      if (wasCompensated) {
-        // Only update non-balance fields
-        updateData.skipBalanceUpdate = true // Flag to skip balance updates
-      }
 
       await updateContribution(contributionId, updateData)
 
@@ -227,7 +217,12 @@ export function EditContributionModal({ isOpen, contributionId, onClose, onSucce
       alert('Contribuição atualizada com sucesso!')
     } catch (error) {
       console.error('Error updating contribution:', error)
-      alert('Erro ao atualizar contribuição. Tente novamente.')
+      const msg = error.message || ''
+      if (msg.includes('última compensação') || msg.includes('histórico')) {
+        alert(msg)
+      } else {
+        alert('Erro ao atualizar contribuição. Tente novamente.')
+      }
     } finally {
       setSaving(false)
     }
@@ -302,11 +297,11 @@ export function EditContributionModal({ isOpen, contributionId, onClose, onSucce
                   </strong>
                 </div>
                 <p style={{ color: '#666', fontSize: '14px', margin: 0 }}>
-                  Esta contribuição já foi compensada. Qualquer edição não afetará o saldo das pessoas.
+                  Esta contribuição está no período já compensado. Não é possível alterar o registro; o histórico permanece bloqueado.
                 </p>
               </div>
             )}
-            <form onSubmit={handleSubmit}>
+            <form onSubmit={isCompensated ? (e) => e.preventDefault() : handleSubmit}>
             {profile?.isAdmin && (
               <div style={{ marginBottom: '16px' }}>
                 <label style={{ display: 'block', marginBottom: '8px', color: '#666', fontWeight: 'bold' }}>
@@ -685,16 +680,16 @@ export function EditContributionModal({ isOpen, contributionId, onClose, onSucce
               </button>
               <button
                 type="submit"
-                disabled={saving}
+                disabled={saving || isCompensated}
                 style={{
                   padding: '12px 24px',
-                  background: saving ? '#CCC' : 'linear-gradient(135deg, #A0522D 0%, #D2691E 100%)',
+                  background: saving || isCompensated ? '#CCC' : 'linear-gradient(135deg, #A0522D 0%, #D2691E 100%)',
                   color: '#FFF',
                   border: 'none',
                   borderRadius: '8px',
                   fontSize: '16px',
                   fontWeight: 'bold',
-                  cursor: saving ? 'not-allowed' : 'pointer',
+                  cursor: saving || isCompensated ? 'not-allowed' : 'pointer',
                   boxShadow: '0 2px 8px rgba(0, 0, 0, 0.2)'
                 }}
               >

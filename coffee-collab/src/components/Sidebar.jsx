@@ -7,6 +7,7 @@ const menuItems = [
   { path: '/home', icon: '🏠', label: 'Home' },
   { path: '/contributions', icon: '📝', label: 'Contribuições' },
   { path: '/compensations', icon: '⚖️', label: 'Compensações' },
+  { path: '/auditoria', icon: '🔎', label: 'Auditoria' },
   { path: '/settings', icon: '⚙️', label: 'Settings' },
   { path: '/users', icon: '👥', label: 'Usuários', adminOnly: true }
 ]

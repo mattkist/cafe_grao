@@ -12,6 +12,7 @@ import { Settings } from './pages/Settings'
 import { Contributions } from './pages/Contributions'
 import { Compensations } from './pages/Compensations'
 import { Users } from './pages/Users'
+import { Auditoria } from './pages/Auditoria'
 
 export function App() {
   const { user, loading } = useAuth()
@@ -67,6 +68,14 @@ export function App() {
           element={
             <ProtectedRoute requireActive>
               <Compensations />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/auditoria"
+          element={
+            <ProtectedRoute requireActive>
+              <Auditoria />
             </ProtectedRoute>
           }
         />

@@ -9,7 +9,15 @@ import { useUserProfile } from '../hooks/useUserProfile'
 import { NewContributionModal } from '../components/NewContributionModal'
 import { EditContributionModal } from '../components/EditContributionModal'
 import { deleteContribution } from '../services/contributionService'
+import { getLastCompensationDate } from '../services/compensationService'
 import { ensureImageUrl } from '../services/googleDriveService'
+
+/** Contribuições com data <= última compensação: histórico bloqueado (sem edição/exclusão). */
+function isContributionDateLocked(contribution, lastCompDate) {
+  if (!lastCompDate) return false
+  const d = contribution.purchaseDate?.toDate?.() || new Date(contribution.purchaseDate)
+  return d.getTime() <= lastCompDate.getTime()
+}
 
 export function Contributions() {
   const { user } = useAuth()
@@ -33,14 +41,17 @@ export function Contributions() {
   const [allContributions, setAllContributions] = useState([])
   const [allUsers, setAllUsers] = useState([])
   const [allProducts, setAllProducts] = useState([])
+  const [lastCompensationDate, setLastCompensationDate] = useState(null)
 
   const loadContributions = async () => {
     try {
-      const [contribs, usersList, productsList] = await Promise.all([
+      const [contribs, usersList, productsList, lastComp] = await Promise.all([
         getAllContributions(),
         getActiveUsers(),
-        getAllProducts()
+        getAllProducts(),
+        getLastCompensationDate()
       ])
+      setLastCompensationDate(lastComp)
       
       // Load details for divided contributions
       const contribsWithDetails = await Promise.all(
@@ -171,7 +182,12 @@ export function Contributions() {
       alert('Contribuição deletada com sucesso!')
     } catch (error) {
       console.error('Error deleting contribution:', error)
-      alert('Erro ao deletar contribuição. Tente novamente.')
+      const msg = error.message || ''
+      if (msg.includes('última compensação') || msg.includes('histórico')) {
+        alert(msg)
+      } else {
+        alert('Erro ao deletar contribuição. Tente novamente.')
+      }
     }
   }
 
@@ -407,8 +423,9 @@ export function Contributions() {
               const purchaseDate = contribution.purchaseDate?.toDate?.() || new Date(contribution.purchaseDate)
               const contributionUser = usersMap[contribution.userId]
               const product = productsMap[contribution.productId]
-              const canEdit = user && (contribution.userId === user.uid || profile?.isAdmin)
-              const canDelete = user && (contribution.userId === user.uid || profile?.isAdmin)
+              const historyLocked = isContributionDateLocked(contribution, lastCompensationDate)
+              const canEdit = user && (contribution.userId === user.uid || profile?.isAdmin) && !historyLocked
+              const canDelete = user && (contribution.userId === user.uid || profile?.isAdmin) && !historyLocked
               
               return (
                 <div
