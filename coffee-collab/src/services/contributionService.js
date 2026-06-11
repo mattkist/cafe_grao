@@ -15,9 +15,13 @@ import {
   writeBatch
 } from 'firebase/firestore'
 import { db } from '../lib/firebase'
-import { updateProductAveragePrice } from './productService'
 import { getUserProfile, updateUserProfile } from './userService'
-import { shouldTriggerCompensation, executeAutomaticCompensation } from './compensationService'
+import {
+  shouldTriggerCompensation,
+  executeAutomaticCompensation,
+  isContributionCompensated
+} from './compensationService'
+import { getCakeValue } from './configurationService'
 
 /**
  * Create a new contribution with atomicity
@@ -26,8 +30,38 @@ import { shouldTriggerCompensation, executeAutomaticCompensation } from './compe
 export async function createContribution(contributionData) {
   const isDivided = contributionData.isDivided || false
   const participantUserIds = contributionData.participantUserIds || []
+  const isHomemadeCake = contributionData.isHomemadeCake || false
   
   try {
+    // Get cake value to calculate quantity (only if not homemade)
+    const cakeValue = await getCakeValue()
+    
+    // Calculate quantity of cakes
+    let quantityCakes
+    let value
+    if (isHomemadeCake) {
+      // Homemade cake: value is 0, quantity is manual
+      value = 0
+      quantityCakes = contributionData.quantityCakes || 0
+      if (quantityCakes <= 0) {
+        throw new Error('Quantidade de bolos deve ser maior que zero para bolos caseiros')
+      }
+    } else {
+      // Regular cake: calculate quantity from value
+      value = contributionData.value
+      if (value <= 0) {
+        throw new Error('Valor deve ser maior que zero para bolos comprados')
+      }
+      quantityCakes = value / cakeValue
+    }
+
+    const purchaseDateObj = new Date(contributionData.purchaseDate)
+    if (await isContributionCompensated(purchaseDateObj)) {
+      throw new Error(
+        'Não é permitido registrar contribuição com data igual ou anterior à última compensação. O histórico desse período está encerrado.'
+      )
+    }
+    
     // Prepare data before batch operations
     const contributionsRef = collection(db, 'contributions')
     const contributionId = doc(contributionsRef).id // Generate ID upfront
@@ -35,15 +69,12 @@ export async function createContribution(contributionData) {
     const newContribution = {
       userId: contributionData.userId,
       purchaseDate: Timestamp.fromDate(new Date(contributionData.purchaseDate)),
-      value: contributionData.value,
-      quantityKg: contributionData.quantityKg,
-      productId: contributionData.productId,
+      value: value,
+      quantityCakes: quantityCakes,
+      cakeValue: isHomemadeCake ? null : cakeValue, // Only save cake value for regular cakes
       purchaseEvidence: contributionData.purchaseEvidence || null,
-      arrivalEvidence: contributionData.arrivalEvidence || null,
-      arrivalDate: contributionData.arrivalDate 
-        ? Timestamp.fromDate(new Date(contributionData.arrivalDate))
-        : null,
       isDivided: isDivided,
+      isHomemadeCake: isHomemadeCake,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp()
     }
@@ -69,8 +100,8 @@ export async function createContribution(contributionData) {
       // All participants including the buyer
       const allParticipants = [...new Set([contributionData.userId, ...participantUserIds])]
       const totalParticipants = allParticipants.length
-      const quantityPerPerson = contributionData.quantityKg / totalParticipants
-      const valuePerPerson = contributionData.value / totalParticipants
+      const quantityPerPerson = quantityCakes / totalParticipants
+      const valuePerPerson = value / totalParticipants
       
       // Create contribution details subcollection
       const detailsRef = collection(db, 'contributions', contributionId, 'contributionDetails')
@@ -85,7 +116,7 @@ export async function createContribution(contributionData) {
           batch.set(detailRef, {
             userId: userId,
             userName: userProfile.name || 'Usuário desconhecido',
-            quantityKg: quantityPerPerson,
+            quantityCakes: quantityPerPerson,
             value: valuePerPerson,
             createdAt: serverTimestamp()
           })
@@ -96,38 +127,42 @@ export async function createContribution(contributionData) {
     // Commit batch atomically - all or nothing
     await batch.commit()
     
-    // After successful batch commit, update product average price
-    // This is done outside the batch because it requires reading all contributions
-    try {
-      await updateProductAveragePrice(contributionData.productId)
-    } catch (error) {
-      console.error('Error updating product average price:', error)
-      // Don't fail the whole operation if product update fails
-    }
-    
     // Reprocess all user balances to ensure accuracy
     // This recalculates from last compensation + contributions after it
+    // IMPORTANT: Wait for reprocessing to complete before returning
+    // This ensures the balance is updated when the UI refreshes
     try {
       const { reprocessAllUserBalances } = await import('./userService')
-      await reprocessAllUserBalances()
+      const result = await reprocessAllUserBalances()
+      console.log('Balance reprocessing result:', result.message)
     } catch (error) {
       console.error('Error reprocessing balances:', error)
+      // Log detailed error for debugging
+      console.error('Balance reprocessing error details:', {
+        message: error.message,
+        stack: error.stack
+      })
       // Don't fail the whole operation if balance reprocessing fails
-      // The balance will be corrected on next reprocessing
+      // But log the error clearly so it can be debugged
+      // The balance will be corrected on next reprocessing or manual trigger
     }
     
     // Check if compensation should be triggered
+    let compensationCreated = false
     try {
       const shouldTrigger = await shouldTriggerCompensation()
       if (shouldTrigger) {
-        await executeAutomaticCompensation()
+        const compensationId = await executeAutomaticCompensation()
+        if (compensationId) {
+          compensationCreated = true
+        }
       }
     } catch (error) {
       console.error('Error checking/executing compensation:', error)
       // Don't fail the whole operation if compensation check fails
     }
     
-    return contributionId
+    return { contributionId, compensationCreated }
   } catch (error) {
     console.error('Error creating contribution:', error)
     throw new Error(`Erro ao criar contribuição: ${error.message}`)
@@ -241,31 +276,86 @@ export async function updateContribution(contributionId, updates) {
   }
 
   try {
+    if (await isContributionCompensated(contribution.purchaseDate)) {
+      throw new Error(
+        'Não é permitido alterar contribuições com data igual ou anterior à última compensação. O histórico desse período está encerrado.'
+      )
+    }
+
     const contributionRef = doc(db, 'contributions', contributionId)
     
+    // Get cake value for calculation (only if not homemade)
+    const cakeValue = await getCakeValue()
+    
+    // Determine if this is a homemade cake
+    const isHomemadeCake = updates.isHomemadeCake !== undefined 
+      ? updates.isHomemadeCake 
+      : (contribution.isHomemadeCake || false)
+    
+    // Calculate quantityCakes and value based on isHomemadeCake
+    let quantityCakes = contribution.quantityCakes || 0
+    let value = contribution.value || 0
     const updateData = {
       ...updates,
       updatedAt: serverTimestamp()
     }
+    delete updateData.skipBalanceUpdate
+    
+    if (isHomemadeCake) {
+      // Homemade cake: value is 0, quantity is manual
+      value = 0
+      updateData.value = 0
+      
+      if (updates.quantityCakes !== undefined) {
+        quantityCakes = updates.quantityCakes
+        if (quantityCakes <= 0) {
+          throw new Error('Quantidade de bolos deve ser maior que zero para bolos caseiros')
+        }
+        updateData.quantityCakes = quantityCakes
+      } else if (updates.isHomemadeCake && !contribution.isHomemadeCake) {
+        // Converting from regular to homemade - keep current quantity
+        quantityCakes = contribution.quantityCakes || 0
+        updateData.quantityCakes = quantityCakes
+      }
+      
+      updateData.cakeValue = null // Don't save cake value for homemade cakes
+    } else {
+      // Regular cake: calculate quantity from value
+      if (updates.value !== undefined) {
+        value = updates.value
+        if (value <= 0) {
+          throw new Error('Valor deve ser maior que zero para bolos comprados')
+        }
+        quantityCakes = value / cakeValue
+        updateData.quantityCakes = quantityCakes
+        updateData.cakeValue = cakeValue // Save cake value at time of update
+      } else if (updates.isHomemadeCake === false && contribution.isHomemadeCake) {
+        // Converting from homemade to regular - need value
+        if (updates.value === undefined) {
+          throw new Error('Valor é obrigatório ao converter bolo caseiro em bolo comprado')
+        }
+      }
+    }
+    
+    updateData.isHomemadeCake = isHomemadeCake
     
     // Convert dates to Timestamps if present
     if (updates.purchaseDate) {
-      updateData.purchaseDate = Timestamp.fromDate(new Date(updates.purchaseDate))
-    }
-    if (updates.arrivalDate) {
-      updateData.arrivalDate = Timestamp.fromDate(new Date(updates.arrivalDate))
+      const newPurchaseDate = new Date(updates.purchaseDate)
+      if (await isContributionCompensated(newPurchaseDate)) {
+        throw new Error(
+          'Não é permitido definir a data da compra em período já compensado (data igual ou anterior à última compensação).'
+        )
+      }
+      updateData.purchaseDate = Timestamp.fromDate(newPurchaseDate)
     }
     
     const isDivided = updates.isDivided !== undefined ? updates.isDivided : (contribution.isDivided || false)
     const participantUserIds = updates.participantUserIds || []
-    const skipBalanceUpdate = updates.skipBalanceUpdate || false
-    
-    // Remove skipBalanceUpdate from updateData as it's not a field to save
-    delete updateData.skipBalanceUpdate
     
     // Prepare user profiles before batch (if needed)
     let userProfiles = []
-    if (!skipBalanceUpdate && isDivided && participantUserIds.length > 0) {
+    if (isDivided && participantUserIds.length > 0) {
       const allParticipants = [...new Set([contribution.userId, ...participantUserIds])]
       userProfiles = await Promise.all(
         allParticipants.map(userId => getUserProfile(userId))
@@ -278,8 +368,8 @@ export async function updateContribution(contributionId, updates) {
     // Update contribution document
     batch.update(contributionRef, updateData)
     
-    // Handle divided contribution changes (only if not skipping balance updates)
-    if (!skipBalanceUpdate && isDivided && participantUserIds.length > 0) {
+    // Handle divided contribution changes
+    if (isDivided && participantUserIds.length > 0) {
       // Delete old details
       const detailsRef = collection(db, 'contributions', contributionId, 'contributionDetails')
       const oldDetailsSnapshot = await getDocs(detailsRef)
@@ -290,10 +380,10 @@ export async function updateContribution(contributionId, updates) {
       // Create new details
       const allParticipants = [...new Set([contribution.userId, ...participantUserIds])]
       const totalParticipants = allParticipants.length
-      const quantityKg = updates.quantityKg !== undefined ? updates.quantityKg : contribution.quantityKg
-      const value = updates.value !== undefined ? updates.value : contribution.value
-      const quantityPerPerson = quantityKg / totalParticipants
-      const valuePerPerson = value / totalParticipants
+      const currentQuantityCakes = quantityCakes
+      const currentValue = value
+      const quantityPerPerson = currentQuantityCakes / totalParticipants
+      const valuePerPerson = currentValue / totalParticipants
       
       const newDetailsRef = collection(db, 'contributions', contributionId, 'contributionDetails')
       
@@ -306,7 +396,7 @@ export async function updateContribution(contributionId, updates) {
           batch.set(detailRef, {
             userId: userId,
             userName: userProfile.name || 'Usuário desconhecido',
-            quantityKg: quantityPerPerson,
+            quantityCakes: quantityPerPerson,
             value: valuePerPerson,
             createdAt: serverTimestamp()
           })
@@ -314,7 +404,7 @@ export async function updateContribution(contributionId, updates) {
       }
       
       updateData.isDivided = true
-    } else if (!skipBalanceUpdate && !isDivided && contribution.isDivided) {
+    } else if (!isDivided && contribution.isDivided) {
       // Was divided, now regular - delete details
       const detailsRef = collection(db, 'contributions', contributionId, 'contributionDetails')
       const oldDetailsSnapshot = await getDocs(detailsRef)
@@ -325,62 +415,44 @@ export async function updateContribution(contributionId, updates) {
       updateData.isDivided = false
     }
     
-    // If skipping balance update, still update isDivided flag if changed
-    if (skipBalanceUpdate && updates.isDivided !== undefined) {
-      updateData.isDivided = updates.isDivided
-      batch.update(contributionRef, { isDivided: updates.isDivided })
-    }
-    
     // Commit batch atomically - all or nothing
     await batch.commit()
     
-    // After successful batch commit, update product average price if needed
-    if (updates.value !== undefined || updates.quantityKg !== undefined) {
-      try {
-        await updateProductAveragePrice(contribution.productId)
-      } catch (error) {
-        console.error('Error updating product average price:', error)
-        // Don't fail the whole operation if product update fails
-      }
-    }
-    
-    // If arrivalEvidence was added and product has no photo, use it as product photo
-    if (updates.arrivalEvidence) {
-      try {
-        const { getProductById, updateProduct } = await import('./productService')
-        const product = await getProductById(contribution.productId)
-        if (product && !product.photoURL) {
-          await updateProduct(contribution.productId, { photoURL: updates.arrivalEvidence })
-        }
-      } catch (error) {
-        console.error('Error updating product photo:', error)
-        // Don't fail the whole operation if product photo update fails
-      }
-    }
-    
-    // Reprocess all user balances to ensure accuracy (only if not skipping balance update)
+    // Reprocess all user balances to ensure accuracy
     // This recalculates from last compensation + contributions after it
-    if (!skipBalanceUpdate) {
-      try {
-        const { reprocessAllUserBalances } = await import('./userService')
-        await reprocessAllUserBalances()
-      } catch (error) {
-        console.error('Error reprocessing balances:', error)
-        // Don't fail the whole operation if balance reprocessing fails
-        // The balance will be corrected on next reprocessing
-      }
+    // IMPORTANT: Wait for reprocessing to complete before returning
+    try {
+      const { reprocessAllUserBalances } = await import('./userService')
+      const result = await reprocessAllUserBalances()
+      console.log('Balance reprocessing result:', result.message)
+    } catch (error) {
+      console.error('Error reprocessing balances:', error)
+      // Log detailed error for debugging
+      console.error('Balance reprocessing error details:', {
+        message: error.message,
+        stack: error.stack
+      })
+      // Don't fail the whole operation if balance reprocessing fails
+      // But log the error clearly so it can be debugged
+      // The balance will be corrected on next reprocessing or manual trigger
     }
     
     // Check if compensation should be triggered
+    let compensationCreated = false
     try {
       const shouldTrigger = await shouldTriggerCompensation()
       if (shouldTrigger) {
-        await executeAutomaticCompensation()
+        const compensationId = await executeAutomaticCompensation()
+        if (compensationId) {
+          compensationCreated = true
+        }
       }
     } catch (error) {
       console.error('Error checking/executing compensation:', error)
       // Don't fail the whole operation if compensation check fails
     }
+    
+    return { compensationCreated }
   } catch (error) {
     console.error('Error updating contribution:', error)
     throw new Error(`Erro ao atualizar contribuição: ${error.message}`)
@@ -392,6 +464,11 @@ export async function updateContribution(contributionId, updates) {
  */
 export async function deleteContribution(contributionId) {
   const contribution = await getContributionById(contributionId)
+  if (contribution && (await isContributionCompensated(contribution.purchaseDate))) {
+    throw new Error(
+      'Não é permitido excluir contribuições com data igual ou anterior à última compensação. O histórico desse período está encerrado.'
+    )
+  }
   const contributionRef = doc(db, 'contributions', contributionId)
   
   // Delete contribution details if it's divided
@@ -406,8 +483,6 @@ export async function deleteContribution(contributionId) {
       })
       await batch.commit()
     }
-    
-    await updateProductAveragePrice(contribution.productId)
   }
   
   await deleteDoc(contributionRef)
@@ -418,20 +493,3 @@ export async function deleteContribution(contributionId) {
   await reprocessAllUserBalances()
 }
 
-/**
- * Get contributions missing arrival data for a user
- */
-export async function getContributionsMissingArrival(userId) {
-  const contributionsRef = collection(db, 'contributions')
-  const q = query(
-    contributionsRef,
-    where('userId', '==', userId),
-    orderBy('purchaseDate', 'desc')
-  )
-  
-  const querySnapshot = await getDocs(q)
-  
-  return querySnapshot.docs
-    .map(doc => ({ id: doc.id, ...doc.data() }))
-    .filter(contrib => !contrib.arrivalEvidence || !contrib.arrivalDate)
-}

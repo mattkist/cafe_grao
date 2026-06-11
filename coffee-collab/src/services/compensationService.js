@@ -8,21 +8,46 @@ import {
   query,
   orderBy,
   serverTimestamp,
-  writeBatch
+  writeBatch,
+  Timestamp
 } from 'firebase/firestore'
 import { db } from '../lib/firebase'
 import { getActiveUsers, updateUserProfile } from './userService'
 
 /**
+ * Ensures compensation date is strictly after the last recorded compensation (closed history).
+ * @param {Date|Timestamp} dateValue
+ */
+async function assertCompensationDateAfterLast(dateValue) {
+  const lastCompDate = await getLastCompensationDate()
+  if (!lastCompDate) return
+  const d =
+    dateValue instanceof Date
+      ? dateValue
+      : dateValue?.toDate?.()
+        ? dateValue.toDate()
+        : new Date(dateValue)
+  if (d.getTime() <= lastCompDate.getTime()) {
+    throw new Error(
+      'Não é permitido registrar compensação com data igual ou anterior à última compensação. O histórico desse período está encerrado.'
+    )
+  }
+}
+
+/**
  * Create a new compensation
  */
-export async function createCompensation(date, totalKg, details) {
+export async function createCompensation(date, totalCakes, details) {
   const compensationsRef = collection(db, 'compensations')
+  
+  // Convert date to Timestamp if it's a Date object
+  const dateTimestamp = date instanceof Date ? Timestamp.fromDate(date) : date
+  await assertCompensationDateAfterLast(dateTimestamp.toDate ? dateTimestamp.toDate() : new Date(dateTimestamp))
   
   // Create compensation document
   const compensationDoc = await addDoc(compensationsRef, {
-    date: date,
-    totalKg: totalKg,
+    date: dateTimestamp,
+    totalCakes: totalCakes,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp()
   })
@@ -38,7 +63,7 @@ export async function createCompensation(date, totalKg, details) {
       userName: detail.userName,
       balanceBefore: detail.balanceBefore,
       balanceAfter: detail.balanceAfter,
-      compensationKg: detail.compensationKg
+      compensationCakes: detail.compensationCakes
     })
   }
 
@@ -168,13 +193,21 @@ export async function executeAutomaticCompensation() {
     return null // No compensation needed
   }
 
+  const compensationMoment = new Date()
+  try {
+    await assertCompensationDateAfterLast(compensationMoment)
+  } catch (e) {
+    console.error('Compensação automática cancelada:', e)
+    return null
+  }
+
   // Prepare compensation details
   const details = activeUsers.map(user => ({
     userId: user.id,
     userName: user.name,
     balanceBefore: user.balance || 0,
     balanceAfter: (user.balance || 0) - minBalance,
-    compensationKg: minBalance
+    compensationCakes: minBalance
   }))
 
   // Update user balances
@@ -191,7 +224,7 @@ export async function executeAutomaticCompensation() {
 
   // Create compensation record
   const compensationId = await createCompensation(
-    new Date(),
+    compensationMoment,
     minBalance,
     details
   )

@@ -3,38 +3,34 @@ import { useState, useEffect } from 'react'
 import { useAuth } from '../hooks/useAuth'
 import { useUserProfile } from '../hooks/useUserProfile'
 import { getActiveUsers } from '../services/userService'
-import { searchProducts, createProduct, getAllProducts, getProductById } from '../services/productService'
 import { getContributionById, updateContribution } from '../services/contributionService'
 import { uploadContributionEvidence } from '../services/storageService'
 import { ensureImageUrl } from '../services/googleDriveService'
 import { isContributionCompensated } from '../services/compensationService'
+import { getCakeValue } from '../services/configurationService'
 
 export function EditContributionModal({ isOpen, contributionId, onClose, onSuccess }) {
   const { user } = useAuth()
   const { profile } = useUserProfile()
   const [users, setUsers] = useState([])
-  const [products, setProducts] = useState([])
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [cakeValue, setCakeValue] = useState(25.0)
   
   // Form state
   const [selectedUserId, setSelectedUserId] = useState('')
   const [purchaseDate, setPurchaseDate] = useState('')
   const [value, setValue] = useState('')
-  const [quantityKg, setQuantityKg] = useState('')
-  const [productSearch, setProductSearch] = useState('')
-  const [selectedProductId, setSelectedProductId] = useState('')
-  const [isNewProduct, setIsNewProduct] = useState(false)
+  const [quantityCakes, setQuantityCakes] = useState(0)
   const [purchaseEvidenceFile, setPurchaseEvidenceFile] = useState(null)
   const [purchaseEvidencePreview, setPurchaseEvidencePreview] = useState(null)
   const [purchaseEvidenceURL, setPurchaseEvidenceURL] = useState(null)
-  const [arrivalEvidenceFile, setArrivalEvidenceFile] = useState(null)
-  const [arrivalEvidencePreview, setArrivalEvidencePreview] = useState(null)
-  const [arrivalEvidenceURL, setArrivalEvidenceURL] = useState(null)
-  const [arrivalDate, setArrivalDate] = useState('')
+  const [purchaseEvidenceLink, setPurchaseEvidenceLink] = useState('')
   const [isDivided, setIsDivided] = useState(false)
   const [selectedParticipants, setSelectedParticipants] = useState([])
   const [isCompensated, setIsCompensated] = useState(false)
+  const [isHomemadeCake, setIsHomemadeCake] = useState(false)
+  const [manualQuantityCakes, setManualQuantityCakes] = useState('')
 
   // Load contribution data when modal opens
   useEffect(() => {
@@ -43,10 +39,10 @@ export function EditContributionModal({ isOpen, contributionId, onClose, onSucce
     const loadContribution = async () => {
       setLoading(true)
       try {
-        const [contribution, usersList, productsList] = await Promise.all([
+        const [contribution, usersList, currentCakeValue] = await Promise.all([
           getContributionById(contributionId),
-          getActiveUsers(), // Always load users for split selection
-          getAllProducts()
+          getActiveUsers(),
+          getCakeValue()
         ])
         
         if (!contribution) {
@@ -56,7 +52,7 @@ export function EditContributionModal({ isOpen, contributionId, onClose, onSucce
         }
 
         setUsers(usersList)
-        setProducts(productsList)
+        setCakeValue(currentCakeValue)
         
         // Populate form with existing data
         setSelectedUserId(contribution.userId)
@@ -65,14 +61,16 @@ export function EditContributionModal({ isOpen, contributionId, onClose, onSucce
         setPurchaseDate(purchaseDateObj.toISOString().split('T')[0])
         
         setValue(contribution.value?.toString() || '')
-        setQuantityKg(contribution.quantityKg?.toString() || '')
+        // Support both old (quantityKg) and new (quantityCakes) format for migration
+        const quantity = contribution.quantityCakes || contribution.quantityKg || 0
+        setQuantityCakes(quantity)
         setPurchaseEvidenceURL(contribution.purchaseEvidence || null)
-        setArrivalEvidenceURL(contribution.arrivalEvidence || null)
         setIsDivided(contribution.isDivided || false)
-        
-        if (contribution.arrivalDate) {
-          const arrivalDateObj = contribution.arrivalDate?.toDate?.() || new Date(contribution.arrivalDate)
-          setArrivalDate(arrivalDateObj.toISOString().split('T')[0])
+        setIsHomemadeCake(contribution.isHomemadeCake || false)
+        if (contribution.isHomemadeCake) {
+          setManualQuantityCakes(quantity.toString())
+        } else {
+          setManualQuantityCakes('')
         }
         
         // Load contribution details if divided
@@ -83,16 +81,6 @@ export function EditContributionModal({ isOpen, contributionId, onClose, onSucce
           setSelectedParticipants(participantIds)
         } else {
           setSelectedParticipants([])
-        }
-        
-        // Load product data
-        if (contribution.productId) {
-          const product = await getProductById(contribution.productId)
-          if (product) {
-            setProductSearch(product.name)
-            setSelectedProductId(product.id)
-            setIsNewProduct(false)
-          }
         }
         
         // Check if contribution is already compensated
@@ -109,64 +97,23 @@ export function EditContributionModal({ isOpen, contributionId, onClose, onSucce
     loadContribution()
   }, [isOpen, contributionId, profile, onClose])
 
+  // Calculate quantity of cakes when value changes (only if not homemade)
   useEffect(() => {
-    // If a product is selected and search matches its name, don't search
-    if (selectedProductId && productSearch) {
-      const selectedProduct = products.find(p => p.id === selectedProductId)
-      if (selectedProduct && selectedProduct.name === productSearch) {
-        setProducts([])
-        setIsNewProduct(false)
-        return
-      }
+    if (!isHomemadeCake && value && cakeValue > 0) {
+      const calculatedCakes = parseFloat(value) / cakeValue
+      setQuantityCakes(calculatedCakes)
+    } else if (!isHomemadeCake) {
+      setQuantityCakes(0)
     }
-
-    // If no search text, clear results
-    if (!productSearch) {
-      setProducts([])
-      setIsNewProduct(false)
-      return
+  }, [value, cakeValue, isHomemadeCake])
+  
+  // Update quantityCakes when manual quantity changes (only if homemade)
+  useEffect(() => {
+    if (isHomemadeCake && manualQuantityCakes) {
+      const parsedQuantity = parseFloat(manualQuantityCakes)
+      setQuantityCakes(parsedQuantity || 0)
     }
-
-    // Don't search if a product is already selected (unless user is typing a different name)
-    if (selectedProductId) {
-      const selectedProduct = products.find(p => p.id === selectedProductId)
-      // Only search if user is typing something different than the selected product name
-      if (selectedProduct && selectedProduct.name === productSearch) {
-        setProducts([])
-        setIsNewProduct(false)
-        return
-      }
-    }
-
-    const searchProductsAsync = async () => {
-      try {
-        const results = await searchProducts(productSearch)
-        // Check if current search matches a selected product
-        const matchesSelected = selectedProductId && results.find(p => p.id === selectedProductId && p.name === productSearch)
-        if (matchesSelected) {
-          setProducts([])
-          setIsNewProduct(false)
-        } else {
-          setProducts(results)
-          // Check if current product is in results
-          const currentProductInResults = results.find(p => p.id === selectedProductId)
-          setIsNewProduct(!currentProductInResults && !selectedProductId && results.length === 0)
-          // Clear selection if search doesn't match selected product
-          if (selectedProductId) {
-            const selectedProduct = results.find(p => p.id === selectedProductId)
-            if (!selectedProduct || selectedProduct.name !== productSearch) {
-              setSelectedProductId('')
-            }
-          }
-        }
-      } catch (error) {
-        console.error('Error searching products:', error)
-      }
-    }
-
-    const timeoutId = setTimeout(searchProductsAsync, 300)
-    return () => clearTimeout(timeoutId)
-  }, [productSearch, selectedProductId])
+  }, [manualQuantityCakes, isHomemadeCake])
 
   const handlePurchaseEvidenceChange = (e) => {
     const file = e.target.files[0]
@@ -182,31 +129,28 @@ export function EditContributionModal({ isOpen, contributionId, onClose, onSucce
     }
   }
 
-  const handleArrivalEvidenceChange = (e) => {
-    const file = e.target.files[0]
-    if (file) {
-      setArrivalEvidenceFile(file)
-      const reader = new FileReader()
-      reader.onloadend = () => {
-        setArrivalEvidencePreview(reader.result)
-      }
-      reader.readAsDataURL(file)
-      // Clear existing URL if new file is selected
-      setArrivalEvidenceURL(null)
-    }
-  }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     
-    if (!purchaseDate || !value || !quantityKg || !productSearch) {
-      alert('Preencha todos os campos obrigatórios')
-      return
-    }
+    // Validate based on isHomemadeCake
+    if (isHomemadeCake) {
+      // Homemade cake: quantity is required, value is 0
+      if (!manualQuantityCakes || parseFloat(manualQuantityCakes) <= 0) {
+        alert('Quantidade de bolos deve ser maior que zero para bolos caseiros')
+        return
+      }
+    } else {
+      // Regular cake: value is required
+      if (!purchaseDate || !value) {
+        alert('Preencha todos os campos obrigatórios')
+        return
+      }
 
-    if (parseFloat(value) <= 0 || parseFloat(quantityKg) <= 0) {
-      alert('Valor e quantidade devem ser maiores que zero')
-      return
+      if (parseFloat(value) <= 0) {
+        alert('Valor deve ser maior que zero')
+        return
+      }
     }
 
     const purchaseDateObj = new Date(purchaseDate)
@@ -215,77 +159,50 @@ export function EditContributionModal({ isOpen, contributionId, onClose, onSucce
       return
     }
 
-    if (arrivalDate) {
-      const arrivalDateObj = new Date(arrivalDate)
-      if (arrivalDateObj < purchaseDateObj) {
-        alert('Data de chegada não pode ser anterior à data de compra')
-        return
-      }
-    }
-
     setSaving(true)
     try {
-      // Handle product - create if new, keep existing if same
-      let productId = selectedProductId
-      if (isNewProduct || (!selectedProductId && productSearch)) {
-        const productValue = parseFloat(value)
-        const productQuantity = parseFloat(quantityKg)
-        productId = await createProduct({
-          name: productSearch,
-          description: null,
-          photoURL: null,
-          averagePricePerKg: productQuantity > 0 ? productValue / productQuantity : 0
-        })
-      }
-
-      // Upload new evidence files if provided
+      // Upload new evidence file if provided
       let newPurchaseEvidenceURL = purchaseEvidenceURL
-      let newArrivalEvidenceURL = arrivalEvidenceURL
       
-      if (purchaseEvidenceFile) {
+      // Use Google Drive link if provided, otherwise try file upload
+      const purchaseEvidenceInput = purchaseEvidenceLink || purchaseEvidenceFile
+      if (purchaseEvidenceInput) {
         try {
-          newPurchaseEvidenceURL = await uploadContributionEvidence(purchaseEvidenceFile, contributionId, 'purchase')
+          newPurchaseEvidenceURL = await uploadContributionEvidence(purchaseEvidenceInput, contributionId, 'purchase')
         } catch (uploadError) {
           console.error('Error uploading purchase evidence:', uploadError)
-          alert('Aviso: Upload da evidência de compra falhou. A contribuição será atualizada, mas a imagem antiga será mantida.')
+          const errorMessage = uploadError.message || 'Erro desconhecido ao fazer upload'
+          
+          // Show user-friendly error message
+          if (errorMessage.includes('Google Client ID não configurado')) {
+            alert('⚠️ Google Drive não está configurado. Por favor, configure as credenciais OAuth2 conforme o guia GOOGLE_DRIVE_SETUP.md')
+          } else if (errorMessage.includes('autenticação') || errorMessage.includes('auth')) {
+            alert('⚠️ Erro de autenticação com Google Drive. Por favor, tente novamente e autorize o acesso quando solicitado.')
+          } else {
+            alert(`⚠️ Erro ao processar evidência de compra: ${errorMessage}\n\nVocê pode fazer upload manual e colar o link do Google Drive.`)
+          }
+          // Continue even if upload fails - contribution will be updated without new evidence
         }
       }
 
-      if (arrivalEvidenceFile) {
-        try {
-          newArrivalEvidenceURL = await uploadContributionEvidence(arrivalEvidenceFile, contributionId, 'arrival')
-        } catch (uploadError) {
-          console.error('Error uploading arrival evidence:', uploadError)
-          alert('Aviso: Upload da evidência de chegada falhou. A contribuição será atualizada, mas a imagem antiga será mantida.')
-        }
-      }
-
-      // Check if contribution is already compensated before updating balances
-      const contribution = await getContributionById(contributionId)
-      const wasCompensated = await isContributionCompensated(contribution.purchaseDate)
-      
-      // Update contribution
+      // Update contribution (serviço bloqueia contribuições já no período compensado)
       const updateData = {
         userId: selectedUserId || user.uid,
         purchaseDate: purchaseDate,
-        value: parseFloat(value),
-        quantityKg: parseFloat(quantityKg),
-        productId: productId,
-        arrivalDate: arrivalDate || null,
+        value: isHomemadeCake ? 0 : parseFloat(value),
         isDivided: isDivided,
-        participantUserIds: isDivided ? selectedParticipants : []
-      }
-
-      // Only update evidence URLs if we have new ones
-      if (newPurchaseEvidenceURL !== purchaseEvidenceURL || newArrivalEvidenceURL !== arrivalEvidenceURL) {
-        updateData.purchaseEvidence = newPurchaseEvidenceURL
-        updateData.arrivalEvidence = newArrivalEvidenceURL
+        participantUserIds: isDivided ? selectedParticipants : [],
+        isHomemadeCake: isHomemadeCake
       }
       
-      // If contribution was already compensated, don't update balances
-      if (wasCompensated) {
-        // Only update non-balance fields
-        updateData.skipBalanceUpdate = true // Flag to skip balance updates
+      // Add quantityCakes if homemade
+      if (isHomemadeCake) {
+        updateData.quantityCakes = parseFloat(manualQuantityCakes)
+      }
+
+      // Only update evidence URL if we have a new one
+      if (newPurchaseEvidenceURL !== purchaseEvidenceURL) {
+        updateData.purchaseEvidence = newPurchaseEvidenceURL
       }
 
       await updateContribution(contributionId, updateData)
@@ -293,8 +210,6 @@ export function EditContributionModal({ isOpen, contributionId, onClose, onSucce
       // Reset form
       setPurchaseEvidenceFile(null)
       setPurchaseEvidencePreview(null)
-      setArrivalEvidenceFile(null)
-      setArrivalEvidencePreview(null)
 
       if (onSuccess) onSuccess()
       onClose()
@@ -302,7 +217,12 @@ export function EditContributionModal({ isOpen, contributionId, onClose, onSucce
       alert('Contribuição atualizada com sucesso!')
     } catch (error) {
       console.error('Error updating contribution:', error)
-      alert('Erro ao atualizar contribuição. Tente novamente.')
+      const msg = error.message || ''
+      if (msg.includes('última compensação') || msg.includes('histórico')) {
+        alert(msg)
+      } else {
+        alert('Erro ao atualizar contribuição. Tente novamente.')
+      }
     } finally {
       setSaving(false)
     }
@@ -377,11 +297,11 @@ export function EditContributionModal({ isOpen, contributionId, onClose, onSucce
                   </strong>
                 </div>
                 <p style={{ color: '#666', fontSize: '14px', margin: 0 }}>
-                  Esta contribuição já foi compensada. Qualquer edição não afetará o saldo das pessoas.
+                  Esta contribuição está no período já compensado. Não é possível alterar o registro; o histórico permanece bloqueado.
                 </p>
               </div>
             )}
-            <form onSubmit={handleSubmit}>
+            <form onSubmit={isCompensated ? (e) => e.preventDefault() : handleSubmit}>
             {profile?.isAdmin && (
               <div style={{ marginBottom: '16px' }}>
                 <label style={{ display: 'block', marginBottom: '8px', color: '#666', fontWeight: 'bold' }}>
@@ -423,8 +343,31 @@ export function EditContributionModal({ isOpen, contributionId, onClose, onSucce
             )}
 
             <div style={{ marginBottom: '16px' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={isHomemadeCake}
+                  onChange={(e) => {
+                    setIsHomemadeCake(e.target.checked)
+                    if (e.target.checked) {
+                      setValue('0')
+                      setManualQuantityCakes(quantityCakes.toString())
+                    } else {
+                      setValue('')
+                      setManualQuantityCakes('')
+                    }
+                  }}
+                  style={{ cursor: 'pointer', width: '18px', height: '18px' }}
+                />
+                <span style={{ color: '#666', fontWeight: 'bold', fontSize: '16px' }}>
+                  Eu fiz meuBolo!
+                </span>
+              </label>
+            </div>
+
+            <div style={{ marginBottom: '16px' }}>
               <label style={{ display: 'block', marginBottom: '8px', color: '#666', fontWeight: 'bold' }}>
-                Data Compra *
+                {isHomemadeCake ? 'Data do bolo *' : 'Data Compra *'}
               </label>
               <input
                 type="date"
@@ -441,51 +384,80 @@ export function EditContributionModal({ isOpen, contributionId, onClose, onSucce
               />
             </div>
 
-            <div style={{ marginBottom: '16px' }}>
-              <label style={{ display: 'block', marginBottom: '8px', color: '#666', fontWeight: 'bold' }}>
-                Valor (R$) *
-              </label>
-              <input
-                type="number"
-                step="0.01"
-                value={value}
-                onChange={(e) => setValue(e.target.value)}
-                required
-                min="0.01"
-                style={{
-                  width: '100%',
-                  padding: '12px',
-                  border: '2px solid #DDD',
-                  borderRadius: '8px',
-                  fontSize: '16px'
-                }}
-              />
-            </div>
+            {!isHomemadeCake && (
+              <>
+                <div style={{ marginBottom: '16px' }}>
+                  <label style={{ display: 'block', marginBottom: '8px', color: '#666', fontWeight: 'bold' }}>
+                    Valor (R$) *
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={value}
+                    onChange={(e) => setValue(e.target.value)}
+                    required
+                    min="0.01"
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      border: '2px solid #DDD',
+                      borderRadius: '8px',
+                      fontSize: '16px'
+                    }}
+                  />
+                </div>
+
+                {value && quantityCakes > 0 && (
+                  <div style={{ marginBottom: '16px', padding: '12px', background: '#FFF8E7', borderRadius: '8px', border: '2px solid #D2691E' }}>
+                    <div style={{ fontSize: '14px', color: '#666' }}>
+                      <strong>Quantidade de bolos calculada:</strong> {quantityCakes.toFixed(2)} bolos
+                    </div>
+                    <div style={{ fontSize: '12px', color: '#888', marginTop: '4px' }}>
+                      (Valor do bolo: R$ {cakeValue.toFixed(2)})
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+
+            {isHomemadeCake && (
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ display: 'block', marginBottom: '8px', color: '#666', fontWeight: 'bold' }}>
+                  Quantidade de bolos *
+                </label>
+                <input
+                  type="number"
+                  step="0.1"
+                  value={manualQuantityCakes}
+                  onChange={(e) => setManualQuantityCakes(e.target.value)}
+                  required
+                  min="0.1"
+                  placeholder="Ex: 1, 2.5, 3"
+                  style={{
+                    width: '100%',
+                    padding: '12px',
+                    border: '2px solid #DDD',
+                    borderRadius: '8px',
+                    fontSize: '16px'
+                  }}
+                />
+                <div style={{ fontSize: '12px', color: '#888', marginTop: '4px' }}>
+                  Insira a quantidade de bolos caseiros que você fez
+                </div>
+                <div style={{ marginTop: '12px', padding: '12px', background: '#FFF8E7', borderRadius: '8px', border: '2px solid #D2691E' }}>
+                  <div style={{ fontSize: '14px', color: '#666' }}>
+                    <strong>Valor:</strong> R$ 0,00 (bolo caseiro)
+                  </div>
+                  <div style={{ fontSize: '14px', color: '#666', marginTop: '4px' }}>
+                    <strong>Quantidade:</strong> {manualQuantityCakes || '0'} bolos
+                  </div>
+                </div>
+              </div>
+            )}
 
             <div style={{ marginBottom: '16px' }}>
               <label style={{ display: 'block', marginBottom: '8px', color: '#666', fontWeight: 'bold' }}>
-                Quantidade (KG) *
-              </label>
-              <input
-                type="number"
-                step="0.01"
-                value={quantityKg}
-                onChange={(e) => setQuantityKg(e.target.value)}
-                required
-                min="0.01"
-                style={{
-                  width: '100%',
-                  padding: '12px',
-                  border: '2px solid #DDD',
-                  borderRadius: '8px',
-                  fontSize: '16px'
-                }}
-              />
-            </div>
-
-            <div style={{ marginBottom: '16px' }}>
-              <label style={{ display: 'block', marginBottom: '8px', color: '#666', fontWeight: 'bold' }}>
-                Rachar compra (Vaquinha)
+                {isHomemadeCake ? 'Rachar bolo (Vaquinha)' : 'Rachar compra (Vaquinha)'}
               </label>
               <div style={{ display: 'flex', gap: '24px', alignItems: 'center' }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
@@ -590,7 +562,7 @@ export function EditContributionModal({ isOpen, contributionId, onClose, onSucce
                     </div>
                   ))}
                 </div>
-                {value && quantityKg && (
+                {value && quantityCakes > 0 && (
                   <div style={{ marginTop: '12px', padding: '12px', background: '#FFF', borderRadius: '8px' }}>
                     <div style={{ fontSize: '14px', color: '#666', marginBottom: '8px' }}>
                       <strong>Total de pessoas:</strong> {selectedParticipants.length + 1} (incluindo você)
@@ -599,162 +571,47 @@ export function EditContributionModal({ isOpen, contributionId, onClose, onSucce
                       <strong>Valor por pessoa:</strong> R$ {((parseFloat(value) || 0) / (selectedParticipants.length + 1)).toFixed(2)}
                     </div>
                     <div style={{ fontSize: '14px', color: '#666' }}>
-                      <strong>Quantidade por pessoa:</strong> {((parseFloat(quantityKg) || 0) / (selectedParticipants.length + 1)).toFixed(2)} kg
+                      <strong>Quantidade por pessoa:</strong> {(quantityCakes / (selectedParticipants.length + 1)).toFixed(2)} bolos
                     </div>
                   </div>
                 )}
               </div>
             )}
 
-            <div style={{ marginBottom: '16px' }}>
-              <label style={{ display: 'block', marginBottom: '8px', color: '#666', fontWeight: 'bold' }}>
-                Café/Produto *
-              </label>
-              <div style={{ position: 'relative' }}>
-                <input
-                  type="text"
-                  value={productSearch}
-                  onChange={(e) => {
-                    setProductSearch(e.target.value)
-                    // Clear selection if user starts typing a different name
-                    if (selectedProductId) {
-                      const selectedProduct = products.find(p => p.id === selectedProductId)
-                      if (selectedProduct && e.target.value !== selectedProduct.name) {
-                        setSelectedProductId('')
-                      }
-                    }
-                  }}
-                  onFocus={() => {
-                    // Show search results when focused if there's text and no selection
-                    if (productSearch && !selectedProductId) {
-                      searchProducts(productSearch).then(results => {
-                        setProducts(results)
-                        setIsNewProduct(results.length === 0)
-                      })
-                    }
-                  }}
-                  required
-                  placeholder="Digite para buscar ou criar novo produto"
-                  style={{
-                    width: '100%',
-                    padding: '12px',
-                    border: selectedProductId ? '2px solid #D2691E' : '2px solid #DDD',
-                    borderRadius: '8px',
-                    fontSize: '16px',
-                    background: selectedProductId ? '#FFF8E7' : '#FFF'
-                  }}
-                />
-                {selectedProductId && (
-                  <div style={{
-                    position: 'absolute',
-                    right: '12px',
-                    top: '50%',
-                    transform: 'translateY(-50%)',
-                    color: '#D2691E',
-                    fontSize: '18px'
-                  }}>
-                    ✓
-                  </div>
-                )}
-              </div>
-              {/* Only show dropdown if no product is selected and there are search results */}
-              {productSearch && products.length > 0 && !selectedProductId && (
-                <div
-                  style={{
-                    marginTop: '8px',
-                    border: '1px solid #DDD',
-                    borderRadius: '8px',
-                    maxHeight: '200px',
-                    overflow: 'auto',
-                    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
-                    zIndex: 1000,
-                    position: 'relative'
-                  }}
-                >
-                  {products.map((product) => (
-                    <div
-                      key={product.id}
-                      onClick={() => {
-                        setSelectedProductId(product.id)
-                        setProductSearch(product.name)
-                        setIsNewProduct(false)
-                        setProducts([]) // Hide dropdown immediately after selection
-                      }}
-                      style={{
-                        padding: '12px',
-                        cursor: 'pointer',
-                        borderBottom: '1px solid #EEE',
-                        background: '#FFF',
-                        transition: 'background 150ms ease'
-                      }}
-                      onMouseEnter={(e) => e.target.style.background = '#FFF8E7'}
-                      onMouseLeave={(e) => e.target.style.background = '#FFF'}
-                    >
-                      {product.name}
-                    </div>
-                  ))}
-                </div>
-              )}
-              {selectedProductId && (
-                <div style={{ 
-                  marginTop: '8px', 
-                  padding: '8px 12px',
-                  background: '#E8F5E9',
-                  borderRadius: '6px',
-                  border: '1px solid #4CAF50',
-                  color: '#2E7D32',
-                  fontSize: '14px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px'
-                }}>
-                  <span>✓</span>
-                  <span>Produto selecionado: <strong>{productSearch}</strong></span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSelectedProductId('')
-                      setProductSearch('')
-                      setProducts([])
-                      setIsNewProduct(false)
-                    }}
-                    style={{
-                      marginLeft: 'auto',
-                      background: 'transparent',
-                      border: 'none',
-                      color: '#2E7D32',
-                      cursor: 'pointer',
-                      fontSize: '14px',
-                      textDecoration: 'underline'
-                    }}
-                  >
-                    Alterar
-                  </button>
-                </div>
-              )}
-              {isNewProduct && productSearch && !selectedProductId && (
-                <div style={{ 
-                  marginTop: '8px', 
-                  padding: '8px 12px',
-                  background: '#FFF3E0',
-                  borderRadius: '6px',
-                  border: '1px solid #FF9800',
-                  color: '#E65100',
-                  fontSize: '14px'
-                }}>
-                  ✨ Novo produto será criado: <strong>{productSearch}</strong>
-                </div>
-              )}
-            </div>
 
             <div style={{ marginBottom: '16px' }}>
               <label style={{ display: 'block', marginBottom: '8px', color: '#666', fontWeight: 'bold' }}>
-                Evidência Compra {purchaseEvidenceURL ? '(atual)' : '*'}
+                {isHomemadeCake ? 'Evidência do bolo' : 'Evidência Compra'} {purchaseEvidenceURL ? '(atual)' : ''}
               </label>
+              <div style={{ marginBottom: '8px', fontSize: '12px', color: '#666' }}>
+                Selecione um arquivo para upload automático (ou cole o link do Google Drive se preferir manual)
+              </div>
+              <input
+                type="text"
+                value={purchaseEvidenceLink}
+                onChange={(e) => {
+                  setPurchaseEvidenceLink(e.target.value)
+                  setPurchaseEvidenceFile(null)
+                  setPurchaseEvidencePreview(null)
+                }}
+                placeholder="Cole aqui o link do Google Drive (ou selecione arquivo abaixo)"
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  border: '2px solid #DDD',
+                  borderRadius: '8px',
+                  fontSize: '16px',
+                  marginBottom: '8px'
+                }}
+              />
+              <div style={{ fontSize: '12px', color: '#888', marginBottom: '8px' }}>OU</div>
               <input
                 type="file"
                 accept="image/*"
-                onChange={handlePurchaseEvidenceChange}
+                onChange={(e) => {
+                  handlePurchaseEvidenceChange(e)
+                  setPurchaseEvidenceLink('')
+                }}
                 style={{
                   width: '100%',
                   padding: '12px',
@@ -776,7 +633,12 @@ export function EditContributionModal({ isOpen, contributionId, onClose, onSucce
                   }}
                 />
               )}
-              {purchaseEvidenceURL && !purchaseEvidencePreview && (
+              {purchaseEvidenceLink && !purchaseEvidencePreview && (
+                <div style={{ marginTop: '12px', fontSize: '12px', color: '#666' }}>
+                  Link do Google Drive: {purchaseEvidenceLink.substring(0, 50)}...
+                </div>
+              )}
+              {purchaseEvidenceURL && !purchaseEvidencePreview && !purchaseEvidenceLink && (
                 <div style={{ marginTop: '12px' }}>
                   <p style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>Imagem atual:</p>
                   <img
@@ -797,73 +659,6 @@ export function EditContributionModal({ isOpen, contributionId, onClose, onSucce
               )}
             </div>
 
-            <div style={{ marginBottom: '16px' }}>
-              <label style={{ display: 'block', marginBottom: '8px', color: '#666', fontWeight: 'bold' }}>
-                Evidência Chegada {arrivalEvidenceURL ? '(atual)' : ''}
-              </label>
-              <input
-                type="file"
-                accept="image/*"
-                onChange={handleArrivalEvidenceChange}
-                style={{
-                  width: '100%',
-                  padding: '12px',
-                  border: '2px solid #DDD',
-                  borderRadius: '8px',
-                  fontSize: '16px'
-                }}
-              />
-              {arrivalEvidencePreview && (
-                <img
-                  src={arrivalEvidencePreview}
-                  alt="Preview"
-                  style={{
-                    width: '100%',
-                    maxHeight: '200px',
-                    objectFit: 'contain',
-                    marginTop: '12px',
-                    borderRadius: '8px'
-                  }}
-                />
-              )}
-              {arrivalEvidenceURL && !arrivalEvidencePreview && (
-                <div style={{ marginTop: '12px' }}>
-                  <p style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>Imagem atual:</p>
-                  <img
-                    src={ensureImageUrl(arrivalEvidenceURL)}
-                    alt="Evidência atual"
-                    style={{
-                      width: '100%',
-                      maxHeight: '200px',
-                      objectFit: 'contain',
-                      borderRadius: '8px'
-                    }}
-                    onError={(e) => {
-                      console.error('Error loading image:', arrivalEvidenceURL)
-                      e.target.style.display = 'none'
-                    }}
-                  />
-                </div>
-              )}
-            </div>
-
-            <div style={{ marginBottom: '24px' }}>
-              <label style={{ display: 'block', marginBottom: '8px', color: '#666', fontWeight: 'bold' }}>
-                Data Chegada
-              </label>
-              <input
-                type="date"
-                value={arrivalDate}
-                onChange={(e) => setArrivalDate(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '12px',
-                  border: '2px solid #DDD',
-                  borderRadius: '8px',
-                  fontSize: '16px'
-                }}
-              />
-            </div>
 
             <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
               <button
@@ -885,16 +680,16 @@ export function EditContributionModal({ isOpen, contributionId, onClose, onSucce
               </button>
               <button
                 type="submit"
-                disabled={saving}
+                disabled={saving || isCompensated}
                 style={{
                   padding: '12px 24px',
-                  background: saving ? '#CCC' : 'linear-gradient(135deg, #A0522D 0%, #D2691E 100%)',
+                  background: saving || isCompensated ? '#CCC' : 'linear-gradient(135deg, #A0522D 0%, #D2691E 100%)',
                   color: '#FFF',
                   border: 'none',
                   borderRadius: '8px',
                   fontSize: '16px',
                   fontWeight: 'bold',
-                  cursor: saving ? 'not-allowed' : 'pointer',
+                  cursor: saving || isCompensated ? 'not-allowed' : 'pointer',
                   boxShadow: '0 2px 8px rgba(0, 0, 0, 0.2)'
                 }}
               >
