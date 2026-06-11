@@ -72,8 +72,8 @@ export function Compensations() {
               ℹ️ Como funciona o Saldo e as Compensações?
             </h3>
             <p style={{ fontSize: '14px', color: '#666', lineHeight: '1.6', margin: 0 }}>
-              <strong>Saldo:</strong> Representa o quanto de bolos cada colaborador ainda tem em contribuições positivas. 
-              Quando alguém compra bolo, o saldo aumenta. Quando uma compensação é feita, todos têm o mesmo valor reduzido do saldo.
+              <strong>Saldo:</strong> Representa o quanto de café (em kg) cada colaborador ainda tem em contribuições positivas. 
+              Quando alguém compra café, o saldo aumenta. Quando uma compensação é feita, todos têm o mesmo valor reduzido do saldo.
               <br /><br />
               <strong>Compensação Automática:</strong> Quando todos os usuários ativos têm saldo maior que zero, uma compensação automática é disparada. 
               A compensação reduz o menor saldo de todos os usuários proporcionalmente.
@@ -128,7 +128,7 @@ export function Compensations() {
                       Compensação de {formatDate(compensation.date)}
                     </h3>
                     <p style={{ fontSize: '14px', color: '#666', margin: 0 }}>
-                      Total compensado: <strong>{(compensation.totalCakes || compensation.totalKg || 0).toFixed(2)} bolos</strong>
+                      Total compensado: <strong>{compensation.totalKg.toFixed(2)} kg</strong>
                     </p>
                   </div>
                   <div style={{ fontSize: '24px', color: '#8B4513' }}>
@@ -161,12 +161,12 @@ export function Compensations() {
                               {detail.userName}
                             </div>
                             <div style={{ fontSize: '12px', color: '#666' }}>
-                              Saldo anterior: {(detail.balanceBefore || 0).toFixed(2)} bolos → 
-                              Saldo final: {(detail.balanceAfter || 0).toFixed(2)} bolos
+                              Saldo anterior: {detail.balanceBefore.toFixed(2)} kg → 
+                              Saldo final: {detail.balanceAfter.toFixed(2)} kg
                             </div>
                           </div>
                           <div style={{ fontSize: '14px', color: '#8B4513', fontWeight: 'bold' }}>
-                            -{(detail.compensationCakes || detail.compensationKg || 0).toFixed(2)} bolos
+                            -{detail.compensationKg.toFixed(2)} kg
                           </div>
                         </div>
                       ))}

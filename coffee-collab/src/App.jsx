@@ -9,10 +9,11 @@ import { Landing } from './pages/Landing'
 import { Inactive } from './pages/Inactive'
 import { Home } from './pages/Home'
 import { Settings } from './pages/Settings'
+import { Votes } from './pages/Votes'
 import { Contributions } from './pages/Contributions'
 import { Compensations } from './pages/Compensations'
+import { Products } from './pages/Products'
 import { Users } from './pages/Users'
-import { Auditoria } from './pages/Auditoria'
 
 export function App() {
   const { user, loading } = useAuth()
@@ -36,7 +37,7 @@ export function App() {
   }
 
   return (
-    <BrowserRouter basename={import.meta.env.MODE === 'production' ? '/meuBolo' : undefined}>
+    <BrowserRouter basename={import.meta.env.MODE === 'production' ? '/cafe_grao' : undefined}>
       <Routes>
         <Route path="/" element={<Landing />} />
         <Route
@@ -72,10 +73,18 @@ export function App() {
           }
         />
         <Route
-          path="/auditoria"
+          path="/votes"
           element={
             <ProtectedRoute requireActive>
-              <Auditoria />
+              <Votes />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/products"
+          element={
+            <ProtectedRoute requireActive>
+              <Products />
             </ProtectedRoute>
           }
         />

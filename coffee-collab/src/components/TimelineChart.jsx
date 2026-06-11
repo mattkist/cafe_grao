@@ -31,7 +31,7 @@ export function TimelineChart({ contributions }) {
         }
       }
       
-      monthlyData[monthKey].kg += contrib.quantityCakes || contrib.quantityKg || 0
+      monthlyData[monthKey].kg += contrib.quantityKg || 0
       monthlyData[monthKey].value += contrib.value || 0
     })
 
@@ -56,7 +56,7 @@ export function TimelineChart({ contributions }) {
         trigger: 'axis',
         formatter: (params) => {
           const param = params[0]
-          return `${param.name}<br/>${param.value.toFixed(2)} 🍰`
+          return `${param.name}<br/>${param.value.toFixed(2)} kg`
         }
       },
       grid: {
@@ -76,7 +76,7 @@ export function TimelineChart({ contributions }) {
       yAxis: {
         type: 'value',
         axisLabel: {
-          formatter: '{value} 🍰'
+          formatter: '{value} kg'
         }
       },
       series: [
@@ -92,7 +92,7 @@ export function TimelineChart({ contributions }) {
           label: {
             show: true,
             position: 'top',
-            formatter: '{c} 🍰'
+            formatter: '{c} kg'
           }
         }
       ]

@@ -78,12 +78,12 @@ export function CollaboratorsChart({ users }) {
             '<div style="margin-bottom: 12px; font-size: 14px;">',
             'Saldo: <span style="font-weight: bold; color: #8B4513;">',
             value,
-            ' 🍰</span>',
+            ' kg</span>',
             '</div>',
             '<div style="font-size: 11px; color: #666; line-height: 18px; padding-top: 10px; border-top: 1px solid #E0E0E0;">',
-            'O saldo representa o quanto de bolos cada colaborador ainda tem em contribuições positivas.',
+            'O saldo representa o quanto de café cada colaborador ainda tem em contribuições positivas.',
             '<br/><br/>',
-            '• Quando alguém compra bolo, o saldo aumenta',
+            '• Quando alguém compra café, o saldo aumenta',
             '<br/>',
             '• Quando uma compensação é feita, todos têm o mesmo valor reduzido',
             '</div>'
@@ -98,9 +98,9 @@ export function CollaboratorsChart({ users }) {
       },
       xAxis: {
         type: 'value',
-        name: 'Saldo 🍰',
+        name: 'Saldo (kg)',
         axisLabel: {
-          formatter: '{value} 🍰'
+          formatter: '{value} kg'
         },
         max: (value) => Math.max(value.max * 1.1, 1) // Add some padding
       },
@@ -144,7 +144,7 @@ export function CollaboratorsChart({ users }) {
           label: {
             show: true,
             position: 'right',
-            formatter: '{c} 🍰',
+            formatter: '{c} kg',
             fontSize: 12
           },
           name: 'Saldo',

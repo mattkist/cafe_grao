@@ -44,7 +44,7 @@ Armazena perfis de usuários do sistema.
   photoURL: string | null, // URL da foto de perfil
   isAdmin: boolean,        // Indica se o usuário é administrador
   isActive: boolean,       // Indica se o usuário está ativo
-  balance: number,         // Saldo atual do usuário (em bolos) - default: 0
+  balance: number,         // Saldo atual do usuário (em kg) - default: 0
   createdAt: Timestamp,    // Data de criação do perfil
   updatedAt: Timestamp     // Data de última atualização
 }
@@ -72,15 +72,12 @@ Armazena todas as contribuições (compras de café) registradas.
   userId: string,                   // FK: ID do usuário que contribuiu (reference to users)
   purchaseDate: Timestamp,          // Data da compra
   value: number,                    // Valor gasto (R$)
-  quantityCakes: number,             // Quantidade de bolos (calculado ou manual)
-  quantityKg: number,                // Quantidade comprada (em bolos) - campo mantido para compatibilidade
-  cakeValue: number | null,         // Valor do bolo usado no cálculo (null para bolos caseiros)
+  quantityKg: number,              // Quantidade comprada (em KG)
   productId: string,               // FK: ID do produto/café (reference to products)
   purchaseEvidence: string | null, // URL da imagem/comprovante da compra
   arrivalEvidence: string | null,  // URL da imagem/evidência da chegada
   arrivalDate: Timestamp | null,   // Data de chegada do café
   isDivided: boolean,               // Indica se a compra foi rachada entre colaboradores (default: false)
-  isHomemadeCake: boolean,          // Indica se é um bolo caseiro (default: false)
   createdAt: Timestamp,            // Data de criação do registro
   updatedAt: Timestamp             // Data de última atualização
 }
@@ -94,31 +91,21 @@ Quando `isDivided: true`, cada documento na subcollection representa um particip
   id: string,                    // ID único do documento
   userId: string,                 // FK: ID do usuário participante (reference to users)
   userName: string,               // Nome do usuário (para exibição)
-  quantityKg: number,             // Quantidade de bolos atribuída a este usuário - campo mantido para compatibilidade
+  quantityKg: number,             // Quantidade de kg atribuída a este usuário
   value: number,                  // Valor atribuído a este usuário (R$)
   createdAt: Timestamp           // Data de criação
 }
 ```
 
 **Regras de Negócio**:
-- Ao criar contribuição, `purchaseEvidence` é opcional
+- Ao criar contribuição, `purchaseEvidence` é obrigatório
 - `arrivalEvidence` e `arrivalDate` são opcionais inicialmente
 - Se `arrivalEvidence` for adicionada e o produto ainda não tiver foto, essa evidência vira a foto do produto
-- Ao atualizar uma contribuição de um produto existente, recalcular `averagePricePerKg` do produto (campo mantido para compatibilidade, mas representa preço por bolo). **Nota**: Contribuições com `value = 0` (bolos caseiros) são ignoradas no cálculo do preço médio
+- Ao atualizar uma contribuição de um produto existente, recalcular `averagePricePerKg` do produto
 - **Contribuições já compensadas**: Se `purchaseDate <= data da última compensação`, a contribuição é considerada já compensada. Edições em contribuições já compensadas não afetam o saldo dos usuários (apenas atualizam dados não relacionados ao saldo)
-- **Bolos caseiros (`isHomemadeCake: true`)**:
-  - `value` deve ser `0` (R$ 0,00)
-  - `quantityCakes` é inserido **manualmente** pelo usuário (não calculado)
-  - `cakeValue` é `null` (não usado para cálculo)
-  - 1 bolo caseiro = 1 bolo (equivalente a um bolo comprado)
-  - Contam normalmente para todos os indicadores e saldos
-- **Bolos comprados (`isHomemadeCake: false` ou não definido)**:
-  - `value` é obrigatório e deve ser > 0
-  - `quantityCakes` é calculado automaticamente como `value / cakeValue`
-  - `cakeValue` é salvo no momento da contribuição
 - Se `isDivided: true`:
   - A quantidade e valor são divididos igualmente entre todos os participantes (incluindo o comprador)
-  - Cada participante recebe `quantityCakes / totalParticipantes` e `value / totalParticipantes`
+  - Cada participante recebe `quantityKg / totalParticipantes` e `value / totalParticipantes`
   - O saldo de cada participante é atualizado com a quantidade atribuída a ele
   - Os participantes são armazenados na subcollection `contributionDetails`
 - Se `isDivided: false` (ou não definido, padrão):
@@ -145,18 +132,18 @@ Armazena produtos/cafés disponíveis no sistema.
   name: string,                  // Nome do produto/café
   description: string | null,    // Descrição do produto
   photoURL: string | null,       // URL da foto do produto
-  averagePricePerKg: number,     // Média de preço por bolo (calculado automaticamente) - campo mantido para compatibilidade
+  averagePricePerKg: number,     // Média de preço por KG (calculado automaticamente)
   averageRating: number          // Média de pontuação (0-5, com uma casa decimal, arredondada para baixo)
 }
 ```
 
 **Regras de Negócio**:
-- `averagePricePerKg`: Calculado automaticamente somando todos os valores de contribuições para este produto e dividindo pela soma de todos os bolos (representa preço médio por bolo)
+- `averagePricePerKg`: Calculado automaticamente somando todos os valores de contribuições para este produto e dividindo pela soma de todos os KGs
 - `averageRating`: Calculado automaticamente somando todas as pontuações e dividindo pelo total de votos (arredondado para baixo com uma casa decimal, ex: 4.12 = 4.1, 2.45 = 2.4)
 - Produtos criados automaticamente via modal de contribuição começam com:
   - `description: null`
   - `photoURL: null`
-  - `averagePricePerKg`: valor informado / quantidade de bolos informada
+  - `averagePricePerKg`: valor informado / kg informado
   - `averageRating: 0`
 
 **Regras de Segurança**:
@@ -200,7 +187,7 @@ Armazena compensações realizadas no sistema.
 {
   id: string,                    // ID único do documento
   date: Timestamp,               // Data da compensação
-  totalKg: number,               // Total de bolos compensado - campo mantido para compatibilidade
+  totalKg: number,               // Total de kg compensado
   createdAt: Timestamp,          // Data de criação
   updatedAt: Timestamp           // Data de atualização
 }
@@ -216,7 +203,7 @@ Cada documento na subcollection representa um usuário que participou da compens
   userName: string,               // Nome do usuário (para exibição)
   balanceBefore: number,         // Saldo antes da compensação
   balanceAfter: number,          // Saldo após a compensação
-  compensationKg: number          // Quantidade de bolos compensada para este usuário - campo mantido para compatibilidade
+  compensationKg: number          // Quantidade de kg compensada para este usuário
 }
 ```
 
@@ -261,15 +248,13 @@ Para performance em queries, criar índices compostos:
 
 ## 🔄 Cálculos Automáticos
 
-### Average Price Per Bolo (produtos)
+### Average Price Per KG (produtos)
 
 ```
 averagePricePerKg = 
   SUM(contributions WHERE productId = X).value / 
   SUM(contributions WHERE productId = X).quantityKg
 ```
-
-**Nota**: O campo `averagePricePerKg` é mantido para compatibilidade, mas representa o preço médio por **bolo**, não por quilograma.
 
 **Quando recalcular**:
 - Ao criar nova contribuição

@@ -9,15 +9,7 @@ import { useUserProfile } from '../hooks/useUserProfile'
 import { NewContributionModal } from '../components/NewContributionModal'
 import { EditContributionModal } from '../components/EditContributionModal'
 import { deleteContribution } from '../services/contributionService'
-import { getLastCompensationDate } from '../services/compensationService'
 import { ensureImageUrl } from '../services/googleDriveService'
-
-/** Contribuições com data <= última compensação: histórico bloqueado (sem edição/exclusão). */
-function isContributionDateLocked(contribution, lastCompDate) {
-  if (!lastCompDate) return false
-  const d = contribution.purchaseDate?.toDate?.() || new Date(contribution.purchaseDate)
-  return d.getTime() <= lastCompDate.getTime()
-}
 
 export function Contributions() {
   const { user } = useAuth()
@@ -41,17 +33,14 @@ export function Contributions() {
   const [allContributions, setAllContributions] = useState([])
   const [allUsers, setAllUsers] = useState([])
   const [allProducts, setAllProducts] = useState([])
-  const [lastCompensationDate, setLastCompensationDate] = useState(null)
 
   const loadContributions = async () => {
     try {
-      const [contribs, usersList, productsList, lastComp] = await Promise.all([
+      const [contribs, usersList, productsList] = await Promise.all([
         getAllContributions(),
         getActiveUsers(),
-        getAllProducts(),
-        getLastCompensationDate()
+        getAllProducts()
       ])
-      setLastCompensationDate(lastComp)
       
       // Load details for divided contributions
       const contribsWithDetails = await Promise.all(
@@ -141,7 +130,7 @@ export function Contributions() {
       } else if (sortField === 'value') {
         comparison = (a.value || 0) - (b.value || 0)
       } else if (sortField === 'quantity') {
-        comparison = (a.quantityCakes || a.quantityKg || 0) - (b.quantityCakes || b.quantityKg || 0)
+        comparison = (a.quantityKg || 0) - (b.quantityKg || 0)
       }
       
       return sortDirection === 'asc' ? comparison : -comparison
@@ -182,12 +171,7 @@ export function Contributions() {
       alert('Contribuição deletada com sucesso!')
     } catch (error) {
       console.error('Error deleting contribution:', error)
-      const msg = error.message || ''
-      if (msg.includes('última compensação') || msg.includes('histórico')) {
-        alert(msg)
-      } else {
-        alert('Erro ao deletar contribuição. Tente novamente.')
-      }
+      alert('Erro ao deletar contribuição. Tente novamente.')
     }
   }
 
@@ -423,9 +407,8 @@ export function Contributions() {
               const purchaseDate = contribution.purchaseDate?.toDate?.() || new Date(contribution.purchaseDate)
               const contributionUser = usersMap[contribution.userId]
               const product = productsMap[contribution.productId]
-              const historyLocked = isContributionDateLocked(contribution, lastCompensationDate)
-              const canEdit = user && (contribution.userId === user.uid || profile?.isAdmin) && !historyLocked
-              const canDelete = user && (contribution.userId === user.uid || profile?.isAdmin) && !historyLocked
+              const canEdit = user && (contribution.userId === user.uid || profile?.isAdmin)
+              const canDelete = user && (contribution.userId === user.uid || profile?.isAdmin)
               
               return (
                 <div
@@ -459,19 +442,6 @@ export function Contributions() {
                             }}>
                               Vaquinha
                             </div>
-                            {contribution.isHomemadeCake && (
-                              <img
-                                src={`${import.meta.env.BASE_URL}meuBolo_logo_mini.png`}
-                                alt="Bolo caseiro"
-                                title="meuBolo caseiro!"
-                                style={{
-                                  width: '32px',
-                                  height: '32px',
-                                  objectFit: 'contain',
-                                  filter: 'drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2))'
-                                }}
-                              />
-                            )}
                             <div style={{ fontSize: '14px', color: '#666' }}>
                               {purchaseDate.toLocaleDateString('pt-BR')}
                             </div>
@@ -573,7 +543,7 @@ export function Contributions() {
                           </div>
                           <div style={{ display: 'flex', gap: '16px', fontSize: '14px', color: '#666' }}>
                             <span>
-                              R$ {product.averagePricePerKg?.toFixed(2) || '0.00'}/🍰
+                              R$ {product.averagePricePerKg?.toFixed(2) || '0.00'}/kg
                             </span>
                             <span>
                               {product.averageRating?.toFixed(1) || '0.0'} ⭐
@@ -584,13 +554,11 @@ export function Contributions() {
                       
                       <div style={{ display: 'flex', gap: '16px', marginTop: '8px' }}>
                         <div style={{ color: '#666', fontSize: '14px' }}>
-                          Quantidade: <strong>{(contribution.quantityCakes || contribution.quantityKg || 0).toFixed(2)} 🍰</strong>
+                          Quantidade: <strong>{contribution.quantityKg?.toFixed(2) || 0} kg</strong>
                         </div>
-                        {!contribution.isHomemadeCake && (
-                          <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#2d5016' }}>
-                            R$ {contribution.value?.toFixed(2) || '0.00'}
-                          </div>
-                        )}
+                        <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#2d5016' }}>
+                          R$ {contribution.value?.toFixed(2) || '0.00'}
+                        </div>
                       </div>
                       
                       {/* Evidence section */}
@@ -612,14 +580,9 @@ export function Contributions() {
                                     cursor: 'pointer',
                                     objectFit: 'contain'
                                   }}
-                                  onClick={() => {
-                                    const viewUrl = ensureImageUrl(contribution.purchaseEvidence, true)
-                                    window.open(viewUrl, '_blank')
-                                  }}
+                                  onClick={() => window.open(ensureImageUrl(contribution.purchaseEvidence), '_blank')}
                                   onError={(e) => {
-                                    // If image fails to load, show a clickable link instead
-                                    const viewUrl = ensureImageUrl(contribution.purchaseEvidence, true)
-                                    e.target.parentElement.innerHTML = `<a href="${viewUrl}" target="_blank" style="color: #8B4513; text-decoration: underline; font-weight: bold;">🔗 Ver evidência de compra (clique aqui)</a>`
+                                    e.target.parentElement.innerHTML = `<a href="${contribution.purchaseEvidence}" target="_blank" style="color: #8B4513; text-decoration: underline;">Ver evidência de compra</a>`
                                   }}
                                 />
                               </div>
@@ -639,14 +602,9 @@ export function Contributions() {
                                     cursor: 'pointer',
                                     objectFit: 'contain'
                                   }}
-                                  onClick={() => {
-                                    const viewUrl = ensureImageUrl(contribution.arrivalEvidence, true)
-                                    window.open(viewUrl, '_blank')
-                                  }}
+                                  onClick={() => window.open(ensureImageUrl(contribution.arrivalEvidence), '_blank')}
                                   onError={(e) => {
-                                    // If image fails to load, show a clickable link instead
-                                    const viewUrl = ensureImageUrl(contribution.arrivalEvidence, true)
-                                    e.target.parentElement.innerHTML = `<a href="${viewUrl}" target="_blank" style="color: #8B4513; text-decoration: underline; font-weight: bold;">🔗 Ver evidência de chegada (clique aqui)</a>`
+                                    e.target.parentElement.innerHTML = `<a href="${contribution.arrivalEvidence}" target="_blank" style="color: #8B4513; text-decoration: underline;">Ver evidência de chegada</a>`
                                   }}
                                 />
                               </div>
@@ -660,22 +618,8 @@ export function Contributions() {
                         </div>
                       )}
                     </div>
-                    <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-                      {contribution.isHomemadeCake && (
-                        <img
-                          src={`${import.meta.env.BASE_URL}meuBolo_logo_mini.png`}
-                          alt="Bolo caseiro"
-                          title="meuBolo caseiro!"
-                          style={{
-                            width: '96px',
-                            height: '96px',
-                            objectFit: 'contain',
-                            filter: 'drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2))'
-                          }}
-                        />
-                      )}
-                      <div style={{ display: 'flex', gap: '8px', flexDirection: 'column', alignItems: 'flex-end' }}>
-                        {(contribution.purchaseEvidence || contribution.arrivalEvidence) && (
+                    <div style={{ display: 'flex', gap: '8px', flexDirection: 'column', alignItems: 'flex-end' }}>
+                      {(contribution.purchaseEvidence || contribution.arrivalEvidence) && (
                         <button
                           onClick={() => setShowingEvidence(showingEvidence === contribution.id ? null : contribution.id)}
                           style={{
@@ -728,7 +672,6 @@ export function Contributions() {
                           )}
                         </div>
                       )}
-                      </div>
                     </div>
                   </div>
                 </div>
